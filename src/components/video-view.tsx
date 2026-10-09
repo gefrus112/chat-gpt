@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Clapperboard, Download, Loader2, Pause, Play, ExternalLink, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { DreaminaIcon, SeedanceIcon, KlingIcon } from "@/components/brand-icons";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -28,10 +29,18 @@ const IDEAS = [
   "A viking longship sailing into a storm of auroras",
 ];
 
+/** free public video models — video generation costs 0 credits */
+const VIDEO_MODELS = [
+  { id: "dreamina-4", name: "Dreamina 4", icon: <DreaminaIcon className="h-3.5 w-3.5" />, tag: "dreamy motion" },
+  { id: "seedance-1-pro", name: "Seedance 1 Pro", icon: <SeedanceIcon className="h-3.5 w-3.5" />, tag: "multi-shot" },
+  { id: "kling-omni", name: "Kling Omni", icon: <KlingIcon className="h-3.5 w-3.5" />, tag: "physics-aware" },
+];
+
 export function VideoView() {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("cinematic");
   const [frameCount, setFrameCount] = useState(4);
+  const [videoModel, setVideoModel] = useState("kling-omni");
   const [frames, setFrames] = useState<Frame[]>([]);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -60,7 +69,7 @@ export function VideoView() {
       const res = await fetch("/api/video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, frames: frameCount, style }),
+        body: JSON.stringify({ prompt, frames: frameCount, style, model: videoModel }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "generation failed");
@@ -116,6 +125,27 @@ export function VideoView() {
             className="w-full resize-none bg-transparent px-2 py-1 text-[14px] text-zinc-100 outline-none placeholder:text-zinc-600"
           />
           <div className="mt-1 flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap gap-1">
+              {VIDEO_MODELS.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setVideoModel(m.id)}
+                  title={`${m.name} — ${m.tag} · free public model`}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] transition",
+                    videoModel === m.id ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-white/10 text-zinc-400 hover:bg-white/5"
+                  )}
+                >
+                  {m.icon}
+                  {m.name}
+                </button>
+              ))}
+            </div>
+            <span className="nx-free-pill rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-emerald-300">
+              Free · 0 credits
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <div className="flex flex-wrap gap-1">
               {STYLES.map((s) => (
                 <button

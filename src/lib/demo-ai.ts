@@ -74,8 +74,8 @@ export function demoReply(prompt: string): string {
     return (
       "**Hey — I'm the ChatUltra demo assistant.**\n\n" +
       "You're viewing the static edition of **ChatUltra**, so responses come from a built-in demo brain instead of the live model API. Everything else works exactly like the real studio:\n\n" +
-      "- **Live HTML preview** — ask me for a game or site below, then press *Run* on the code card\n- **Model picker** — GPT-5.2, Claude Opus 5, Claude Sonnet 4.5, Gemini 3 Pro, Luna + your own custom models\n- **Effort dial** — Low to Ultra reasoning bars\n- **Playground** — 7 game templates, external editor window, chatultra-shell terminal\n- **GitHub push** — add your token in Settings > GitHub and push projects straight to *gefrus112/chat-gpt*\n\n" +
-      "Try: *\"build a snake game\"* or *\"create a dark portfolio website\"*."
+      "- **Live HTML preview** — ask me for a game or site below, then press *Run* on the code card\n- **Model picker** — GPT-5.2, Claude Opus 5.1, Claude Opus 5, Claude Sonnet 4.5, Gemini 3 Pro, Luna + your own custom models\n- **Video AI** — Dreamina 4, Seedance 1 Pro and Kling Omni render videos free (pick one in the model picker, or type /video)\n- **Effort dial** — Low to Ultra reasoning bars\n- **Playground** — 7 game templates, external editor window, chatultra-shell terminal\n- **Credits** — Stripe checkout for flagship usage; public models (text + video) are always free\n- **GitHub push** — add your token in Settings > GitHub and push projects straight to *gefrus112/chat-gpt*\n\n" +
+      "Try: *\"build a snake game\"*, *\"make a landing page\"* or *\"render a video of a neon jellyfish\"*."
     );
   }
 
@@ -84,6 +84,42 @@ export function demoReply(prompt: string): string {
     "1. **Playable builds** — say *\"build a snake game\"* and I'll return a single-file HTML game you can **Run** instantly\n2. **Websites** — say *\"make a landing page\"* for a live-previewable site\n3. **Real AI** — run the full ChatUltra server (see the repo README) and every message streams from GPT-5.2 / Claude / Gemini / Luna with your chosen effort level\n\n" +
     "Meanwhile: the **Playground** (game templates + external editor), **terminal**, **Canvas preview**, **settings** and **GitHub push** are all fully functional right here."
   );
+}
+
+/**
+ * Demo video result — used when no video backend is reachable (static site).
+ * Returns a stylized poster + storyboard for the video card.
+ */
+export function demoVideoCard(prompt: string, modelName: string): {
+  model: string;
+  poster?: string;
+  videoUrl?: string;
+  storyboard: string[];
+  demo: boolean;
+  note?: string;
+} {
+  const subject = prompt.replace(/^[^a-z0-9]+/i, "").slice(0, 90) || "your scene";
+  const gradientHues = [
+    ["#0c1022", "#1b1039"],
+    ["#04121a", "#0b2740"],
+    ["#160a26", "#31104d"],
+  ];
+  const [c1, c2] = gradientHues[subject.length % gradientHues.length];
+  const poster = `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient><radialGradient id="glow" cx="0.5" cy="0.55" r="0.55"><stop offset="0" stop-color="#22d3ee" stop-opacity="0.35"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient></defs><rect width="640" height="360" fill="url(#g)"/><rect width="640" height="360" fill="url(#glow)"/><circle cx="320" cy="185" r="86" fill="none" stroke="#22d3ee" stroke-opacity="0.55" stroke-width="2"/><circle cx="320" cy="185" r="56" fill="none" stroke="#c084fc" stroke-opacity="0.4" stroke-width="1.5"/><path d="M300 160l48 25-48 25z" fill="#e2e8f0" fill-opacity="0.85"/><text x="320" y="66" fill="#e2e8f0" font-family="monospace" font-size="19" text-anchor="middle">${modelName}</text><text x="320" y="300" fill="#94a3b8" font-family="monospace" font-size="12" text-anchor="middle">demo storyboard - connect the backend for real renders</text></svg>`
+  )}`;
+  return {
+    model: modelName,
+    poster,
+    demo: true,
+    storyboard: [
+      `Shot 1 — wide establishing frame: ${subject}`,
+      "Shot 2 — slow push-in, key light wraps from frame left, ambient particles drift",
+      "Shot 3 — close-up detail pass, shallow depth of field, subtle film grain",
+      "Shot 4 — camera drifts up and out as the scene resolves to black",
+    ],
+    note: "Free public render (0 credits). Add FAL_KEY / KLING_API_KEY in backend/.env for real video output.",
+  };
 }
 
 /**

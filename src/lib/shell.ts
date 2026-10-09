@@ -66,6 +66,7 @@ const HELP: [string, string][] = [
   ["run", "start the dev server"],
   ["build", "build the project"],
   ["models", "list loaded AI models"],
+  ["credits", "credit balance + free public models"],
   ["git status | log | push", "git operations (push uses your token)"],
   ["npm install | run dev", "package manager"],
   ["ps | df | uname", "system info"],
@@ -256,6 +257,23 @@ export class ChatShell {
         const list = this.modelsProvider?.() ?? [];
         list.forEach((m) => out.push({ text: `  - ${m}`, cls: C.plain }));
         if (!list.length) out.push({ text: "  (none)", cls: C.dim });
+        break;
+      }
+
+      case "credits": {
+        try {
+          const raw = localStorage.getItem("chatultra-settings");
+          const c = raw ? (JSON.parse(raw)?.state?.credits as { balance?: number } | undefined) : undefined;
+          out.push({ text: `credit balance: ${(c?.balance ?? 240).toLocaleString()}`, cls: C.ok });
+        } catch {
+          out.push({ text: "credit balance: 240", cls: C.ok });
+        }
+        out.push({ text: "free public models (0 credits):", cls: C.head });
+        out.push({ text: "  - Luna 1 (text)", cls: C.plain });
+        out.push({ text: "  - Dreamina 4 (video)", cls: C.plain });
+        out.push({ text: "  - Seedance 1 Pro (video)", cls: C.plain });
+        out.push({ text: "  - Kling Omni (video)", cls: C.plain });
+        out.push({ text: "top up with Stripe: open Settings > Connections, or run /credits", cls: C.dim });
         break;
       }
 

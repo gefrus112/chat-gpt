@@ -1,4 +1,4 @@
-export type Provider = "openai" | "anthropic" | "google" | "luna" | "local" | "custom";
+export type Provider = "openai" | "anthropic" | "google" | "luna" | "local" | "custom" | "bytedance" | "kuaishou";
 
 export interface ModelDef {
   id: string;
@@ -6,6 +6,10 @@ export interface ModelDef {
   provider: Provider;
   tagline: string;
   badge?: string;
+  /** text model (default) or video generation model */
+  kind?: "text" | "video";
+  /** free public model — video generation and text at zero credits */
+  free?: boolean;
   /** tailwind classes for the letter tile (local models) */
   tile?: string;
   /** system prompt flavor injected for this model */
@@ -55,11 +59,18 @@ export const BUILT_IN_MODELS: ModelDef[] = [
     flavor: "You behave like o4-mini: fast, lightweight, to the point.",
   },
   {
+    id: "claude-opus-5-1",
+    name: "Claude Opus 5.1",
+    provider: "anthropic",
+    tagline: "The newest, sharpest Claude ever",
+    badge: "New",
+    flavor: "You behave like Claude Opus 5.1 by Anthropic: the newest flagship Claude. You reason with exceptional depth, nuance and precision, self-review your drafts, and excel at complex analysis, agentic coding and long-form thinking.",
+  },
+  {
     id: "claude-opus-5",
     name: "Claude Opus 5",
     provider: "anthropic",
     tagline: "The most powerful Claude model",
-    badge: "New",
     flavor: "You behave like Claude Opus 5 by Anthropic: the flagship, most powerful and nuanced Claude model. You reason with exceptional depth, care and precision, and excel at complex analysis, agentic coding and long-form thinking.",
   },
   {
@@ -91,7 +102,38 @@ export const BUILT_IN_MODELS: ModelDef[] = [
     provider: "luna",
     tagline: "ChatUltra in-house model",
     badge: "ChatUltra",
+    free: true,
     flavor: "You are Luna 1, ChatUltra's in-house model: creative, playful, imaginative, great for brainstorming and generative art.",
+  },
+  {
+    id: "dreamina-4",
+    name: "Dreamina 4",
+    provider: "bytedance",
+    tagline: "Dreamy AI video from a prompt",
+    badge: "Video",
+    kind: "video",
+    free: true,
+    flavor: "You are Dreamina 4 by ByteDance: a video generation model that turns prompts into cinematic, dreamlike motion.",
+  },
+  {
+    id: "seedance-1-pro",
+    name: "Seedance 1 Pro",
+    provider: "bytedance",
+    tagline: "Multi-shot cinematic sequences",
+    badge: "Video",
+    kind: "video",
+    free: true,
+    flavor: "You are Seedance 1 Pro by ByteDance: a video generation model specialized in stable multi-shot cinematic sequences with consistent characters.",
+  },
+  {
+    id: "kling-omni",
+    name: "Kling Omni",
+    provider: "kuaishou",
+    tagline: "Kuaishou's omnifilm video brain",
+    badge: "Video",
+    kind: "video",
+    free: true,
+    flavor: "You are Kling Omni by Kuaishou: an omnimodal video generation model that renders vivid, physics-aware motion from any prompt.",
   },
   {
     id: "gemma-2b",
@@ -126,6 +168,8 @@ export const PROVIDER_LABEL: Record<Provider, string> = {
   luna: "ChatUltra",
   local: "Local AI",
   custom: "Your models",
+  bytedance: "ByteDance Seed",
+  kuaishou: "Kling AI",
 };
 
 export const PROVIDER_URL: Partial<Record<Provider, string>> = {
@@ -133,7 +177,14 @@ export const PROVIDER_URL: Partial<Record<Provider, string>> = {
   anthropic: "https://www.anthropic.com",
   google: "https://deepmind.google/models/gemini/",
   local: "https://ollama.com/library",
+  bytedance: "https://seed.bytedance.com/en/seed_dream",
+  kuaishou: "https://app.klingai.com",
 };
+
+/** free public models — text + video generation at zero credits */
+export function isFreeModel(m: ModelDef): boolean {
+  return Boolean(m.free);
+}
 
 export function findEffort(id: string): EffortDef {
   return EFFORTS.find((e) => e.id === id) ?? EFFORTS[2];

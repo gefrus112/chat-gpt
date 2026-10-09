@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronsUpDown, Plus, Sparkles, Check, Search, ExternalLink, Pencil } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BUILT_IN_MODELS, EFFORTS, PROVIDER_LABEL, PROVIDER_URL, type EffortDef, type ModelDef } from "@/lib/models";
-import { ClaudeIcon, GeminiIcon, LunaIcon, OpenAIIcon } from "@/components/brand-icons";
+import { ClaudeIcon, GeminiIcon, LunaIcon, OpenAIIcon, DreaminaIcon, SeedanceIcon, KlingIcon } from "@/components/brand-icons";
 import { listCustomModels } from "@/lib/custom-models-client";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +49,22 @@ export function ModelIcon({ model, className, size = 28 }: { model: ModelDef; cl
       return (
         <span className={cn(cls, "flex items-center justify-center rounded-lg border border-fuchsia-400/20 bg-fuchsia-950/40")} style={s}>
           <LunaIcon style={inner} />
+        </span>
+      );
+    case "bytedance":
+      return model.id === "seedance-1-pro" ? (
+        <span className={cn(cls, "flex items-center justify-center rounded-lg border border-emerald-400/20 bg-emerald-950/40")} style={s}>
+          <SeedanceIcon style={inner} />
+        </span>
+      ) : (
+        <span className={cn(cls, "flex items-center justify-center rounded-lg border border-pink-400/20 bg-pink-950/40")} style={s}>
+          <DreaminaIcon style={inner} />
+        </span>
+      );
+    case "kuaishou":
+      return (
+        <span className={cn(cls, "flex items-center justify-center rounded-lg border border-purple-400/20 bg-purple-950/40")} style={s}>
+          <KlingIcon style={inner} />
         </span>
       );
     case "local":
@@ -180,6 +196,11 @@ export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreat
                       {m.badge && (
                         <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-px text-[9px] font-medium uppercase tracking-wide text-cyan-300">
                           {m.badge}
+                        </span>
+                      )}
+                      {m.free && (
+                        <span className="nx-free-pill rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300">
+                          Free
                         </span>
                       )}
                     </span>

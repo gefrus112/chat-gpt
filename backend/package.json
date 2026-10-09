@@ -1,0 +1,23 @@
+{
+  "name": "chatultra-backend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "ChatUltra real backend — text + video generation with your API keys, Stripe credits, Supabase accounts, Cloudflare Turnstile",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "optionalDependencies": {
+    "stripe": "^16.0.0",
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

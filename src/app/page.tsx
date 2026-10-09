@@ -8,6 +8,7 @@ import { AgentView } from "@/components/agent-view";
 import { VideoView } from "@/components/video-view";
 import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
 import { AccountDialog } from "@/components/account-dialog";
+import { CreditsDialog } from "@/components/credits-dialog";
 import { BUILT_IN_MODELS, customToModelDef, type EffortDef, type ModelDef } from "@/lib/models";
 import { useSettings } from "@/lib/store";
 import { useCustomModels } from "@/components/model-picker";
@@ -23,6 +24,7 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("appearance");
   const [accountOpen, setAccountOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [railHistory, setRailHistory] = useState(false);
   const [terminalSignal, setTerminalSignal] = useState(0);
@@ -137,6 +139,7 @@ export default function Home() {
             onConversationCreated={() => setHistoryKey((k) => k + 1)}
             onOpenSettings={openSettings}
             onOpenAccount={() => setAccountOpen(true)}
+            onOpenCredits={() => setCreditsOpen(true)}
             onNewChat={newChat}
           />
         )}
@@ -154,6 +157,8 @@ export default function Home() {
       />
 
       <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
+
+      <CreditsDialog open={creditsOpen} onOpenChange={setCreditsOpen} />
     </main>
   );
 }

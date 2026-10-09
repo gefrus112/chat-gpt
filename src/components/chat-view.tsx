@@ -21,6 +21,8 @@ import {
   CircleUserRound,
   Settings,
   TerminalSquare,
+  Clapperboard,
+  Zap,
 } from "lucide-react";
 import { Markdown, StudioContext } from "@/components/markdown";
 import { ModelPicker, EffortBars } from "@/components/model-picker";
@@ -29,9 +31,11 @@ import { ChatTerminal } from "@/components/chat-terminal";
 import { ChatShell, resultToText } from "@/lib/shell";
 import type { SettingsTab } from "@/components/settings-dialog";
 import { findEffort, EFFORTS, PROVIDER_LABEL, type EffortDef, type ModelDef } from "@/lib/models";
-import { demoReply, streamDemoReply } from "@/lib/demo-ai";
+import { demoReply, streamDemoReply, demoVideoCard } from "@/lib/demo-ai";
 import { callClaude } from "@/lib/claude-direct";
 import { useSettings, ACCENTS } from "@/lib/store";
+import { backendGenerate } from "@/lib/cloud";
+import { charge } from "@/lib/credits";
 import { asset } from "@/lib/asset";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -55,10 +59,19 @@ export interface ChatMessage {
   effort?: string;
   streaming?: boolean;
   /** command execution card (slash commands / shell runs) */
-  kind?: "command";
+  kind?: "command" | "video";
   cmd?: string;
   output?: string;
   ok?: boolean;
+  /** video generation result card */
+  video?: {
+    model: string;
+    videoUrl?: string;
+    poster?: string;
+    storyboard?: string[];
+    demo: boolean;
+    free: boolean;
+  };
 }
 
 interface ChatViewProps {
@@ -72,14 +85,15 @@ interface ChatViewProps {
   onConversationCreated: (id: string) => void;
   onOpenSettings: (tab?: SettingsTab) => void;
   onOpenAccount: () => void;
+  onOpenCredits: () => void;
   onNewChat: () => void;
 }
 
 const SUGGESTIONS: { icon: React.ReactNode; title: string; prompt: string }[] = [
   { icon: <Gamepad2 className="h-4 w-4 text-cyan-300" />, title: "Build a game", prompt: "Build a complete playable neon arcade game — a wave-based space shooter with powerups, score and restart. Give me the full single-file HTML." },
+  { icon: <Clapperboard className="h-4 w-4 text-pink-300" />, title: "Generate a video", prompt: "Render a cinematic video: a neon jellyfish drifting through a deep ocean trench, volumetric light rays, slow motion" },
   { icon: <Globe className="h-4 w-4 text-violet-300" />, title: "Create a website", prompt: "Create a stunning dark-themed portfolio website for a game developer, single-file HTML with smooth animations and a hero section." },
   { icon: <Brain className="h-4 w-4 text-amber-300" />, title: "Explain anything", prompt: "Explain how neural networks learn, with a small interactive HTML visualization I can play with." },
-  { icon: <Joystick className="h-4 w-4 text-rose-300" />, title: "Remix a classic", prompt: "Build a complete single-file HTML snake game with neon glow, wrap-around walls, increasing speed and a high-score counter." },
 ];
 
 const SLASH_COMMANDS: { name: string; desc: string }[] = [
@@ -95,6 +109,8 @@ const SLASH_COMMANDS: { name: string; desc: string }[] = [
   { name: "/git <sub>", desc: "git status, git log, git push" },
   { name: "/web", desc: "Toggle web access for replies" },
   { name: "/game <desc>", desc: "Build a playable game from a description" },
+  { name: "/video <desc>", desc: "Generate a video with the picked video model" },
+  { name: "/credits", desc: "Open credits and the Stripe connector" },
   { name: "/export", desc: "Download this chat as Markdown" },
   { name: "/push", desc: "Open GitHub push settings" },
   { name: "/account", desc: "Open your account profile" },
@@ -103,9 +119,9 @@ const SLASH_COMMANDS: { name: string; desc: string }[] = [
   { name: "/clear", desc: "Start a fresh chat" },
 ];
 
-const ARGLESS = new Set(["/help", "/models", "/terminal", "/ls", "/web", "/export", "/push", "/account", "/settings", "/clear"]);
+const ARGLESS = new Set(["/help", "/models", "/terminal", "/ls", "/web", "/export", "/push", "/account", "/settings", "/clear", "/credits"]);
 
-export function ChatView({ models, model, effort, conversationId, terminalSignal, onModel, onEffort, onConversationCreated, onOpenSettings, onOpenAccount, onNewChat }: ChatViewProps) {
+export function ChatView({ models, model, effort, conversationId, terminalSignal, onModel, onEffort, onConversationCreated, onOpenSettings, onOpenAccount, onOpenCredits, onNewChat }: ChatViewProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -129,6 +145,7 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
   const gh = useSettings((s) => s.gh);
   const setAppearance = useSettings((s) => s.setAppearance);
   const appearance = useSettings((s) => s.appearance);
+  const creditBalance = useSettings((s) => s.credits.balance);
 
   useEffect(() => {
     convRef.current = conversationId;
@@ -283,6 +300,20 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
         appendCommand(name, arg ? `[ok] building game: ${arg}` : "usage: /game <description> — try /game neon pong", Boolean(arg));
         if (arg) send(`Build a complete playable single-file HTML game: ${arg}. Full HTML in one code block.`);
         return;
+      case "/video": {
+        const vm = models.find((m) => m.kind === "video");
+        if (!arg) {
+          appendCommand(name, `usage: /video <description> — try /video neon jellyfish drifting${vm ? ` (current video model: ${vm.name})` : ""}`, false);
+          return;
+        }
+        appendCommand(name, `[ok] queued video render on ${currentModel?.kind === "video" ? currentModel.name : vm?.name ?? "video engine"}: ${arg}`);
+        await generateVideo(arg, currentModel?.kind === "video" ? model : vm?.id ?? "kling-omni");
+        return;
+      }
+      case "/credits":
+        onOpenCredits();
+        appendCommand(name, "[ok] opening credits — free public models cost 0");
+        return;
       case "/export": {
         const md =
           "# ChatUltra chat export\n\n" +
@@ -338,6 +369,85 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
 
   /* ---------------- send ---------------- */
 
+  /* ---------------- video generation ---------------- */
+
+  const generateVideo = async (prompt: string, videoModelId: string) => {
+    const videoModel = models.find((m) => m.id === videoModelId);
+    const videoId = `v-${Date.now()}`;
+    setBusy(true);
+    setMessages((m) => [
+      ...m,
+      { id: `u-${Date.now()}`, role: "user", content: prompt },
+      { id: videoId, role: "assistant", kind: "video", content: "", model: videoModelId, streaming: true, video: { model: videoModel?.name ?? videoModelId, demo: true, free: true, storyboard: [] } },
+    ]);
+
+    // credits: free public video models cost 0
+    const c = charge(videoModelId, "video");
+    if (!c.ok) {
+      setMessages((m) =>
+        m.map((x) =>
+          x.id === videoId
+            ? { ...x, streaming: false, content: `Not enough credits for **${videoModel?.name}** (${c.charged} needed). Free public video models — Dreamina 4, Seedance 1 Pro, Kling Omni — always render at 0 credits.` }
+            : x
+        )
+      );
+      setBusy(false);
+      onOpenCredits();
+      return;
+    }
+
+    let result: { model?: string; videoUrl?: string; poster?: string; storyboard?: string[]; demo?: boolean; note?: string } | null = null;
+    try {
+      // 1) dedicated backend (real video with API keys)
+      const be = await backendGenerate("video", { model: videoModelId, prompt, effort });
+      if (be.ok && be.data && typeof be.data === "object") {
+        result = be.data as typeof result;
+      } else {
+        // 2) same-origin server route (bun dev)
+        const res = await fetch("/api/video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, frames: 4, style: "cinematic" }),
+        });
+        if (res.ok) {
+          const j = await res.json();
+          if (Array.isArray(j.frames) && j.frames.length > 0) {
+            result = {
+              model: videoModel?.name ?? videoModelId,
+              poster: `data:image/jpeg;base64,${j.frames[0].base64}`,
+              storyboard: ["Server render via the ChatUltra video pipeline — 4 keyframes at 16:9."],
+              demo: true,
+            };
+          }
+        }
+      }
+    } catch {
+      result = null;
+    }
+
+    if (!result) result = demoVideoCard(prompt, videoModel?.name ?? videoModelId);
+
+    setMessages((m) =>
+      m.map((x) =>
+        x.id === videoId
+          ? {
+              ...x,
+              streaming: false,
+              video: {
+                model: result?.model ?? videoModel?.name ?? videoModelId,
+                videoUrl: result?.videoUrl,
+                poster: result?.poster,
+                storyboard: result?.storyboard ?? [],
+                demo: Boolean(result?.demo),
+                free: true,
+              },
+            }
+          : x
+      )
+    );
+    setBusy(false);
+  };
+
   const send = async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || busy) return;
@@ -351,9 +461,30 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
     if (taRef.current) taRef.current.style.height = "auto";
     setBusy(true);
 
+    // video models (Dreamina 4 / Seedance 1 Pro / Kling Omni) take the video pipeline
+    if (currentModel?.kind === "video") {
+      await generateVideo(msg, model);
+      return;
+    }
+
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content: msg };
     const aiId = `a-${Date.now()}`;
     setMessages((m) => [...m, userMsg, { id: aiId, role: "assistant", content: "", model, effort, streaming: true }]);
+
+    // credits: paid flagships burn credits, free public models are 0
+    const c = charge(model, "text");
+    if (!c.ok) {
+      setMessages((m) =>
+        m.map((x) =>
+          x.id === aiId
+            ? { ...x, streaming: false, content: `Out of credits for **${currentModel?.name}** — this flagship costs ${c.charged} credits per message.\n\nFree options that never run out: **Luna 1** for text, **Dreamina 4 / Seedance 1 Pro / Kling Omni** for video.` }
+            : x
+        )
+      );
+      setBusy(false);
+      onOpenCredits();
+      return;
+    }
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -588,7 +719,7 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
           {messages.length === 0 ? (
             /* ---------- welcome ---------- */
             <div className="flex flex-1 flex-col items-center justify-center px-4">
-              <div className={cn("relative mb-5", "animate-[nxPulse_4s_ease-in-out_infinite]")}>
+              <div className="anim-float relative mb-5">
                 <Image
                   src={asset("/logo.png")}
                   alt="ChatUltra AI"
@@ -599,7 +730,7 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
                   unoptimized
                 />
               </div>
-              <h1 className="bg-gradient-to-r from-cyan-200 via-white to-violet-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
+              <h1 className="anim-grad bg-gradient-to-r from-cyan-200 via-white to-violet-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
                 ChatUltra
               </h1>
               <p className="mt-2 text-[13.5px] text-zinc-400">
@@ -624,7 +755,7 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
               </div>
               <div className="mt-5 flex items-center gap-2 text-[11.5px] text-zinc-600">
                 <TerminalSquare className="h-3.5 w-3.5" />
-                Type <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/</code> for commands — try <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/run neofetch</code>
+                Type <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/</code> for commands — try <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/video neon city flythrough</code> or <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/run neofetch</code>
               </div>
             </div>
           ) : (
@@ -634,7 +765,7 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
                 {messages.map((m) =>
                   m.kind === "command" ? (
                     /* ---------- command execution card ---------- */
-                    <div key={m.id} className="overflow-hidden rounded-xl border border-white/10 bg-[#05070d] font-mono">
+                    <div key={m.id} className="anim-msg overflow-hidden rounded-xl border border-white/10 bg-[#05070d] font-mono">
                       <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-1.5">
                         <SquareTerminal className="h-3 w-3 text-emerald-400" />
                         <span className="text-[10px] uppercase tracking-wider text-zinc-500">chatultra-shell</span>
@@ -656,8 +787,48 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
                         )}
                       </div>
                     </div>
+                  ) : m.kind === "video" ? (
+                    /* ---------- video generation card ---------- */
+                    <div key={m.id} className="anim-msg flex gap-3">
+                      <Image src={asset("/logo.png")} alt="ChatUltra" width={30} height={30} className="mt-0.5 h-[30px] w-[30px] rounded-xl border border-white/10" unoptimized />
+                      <div className="min-w-0 flex-1 overflow-hidden rounded-2xl rounded-tl-md border border-pink-400/20 bg-gradient-to-br from-pink-400/[0.06] to-violet-400/[0.04] p-3">
+                        <div className="flex items-center gap-2 text-[12px] text-zinc-200">
+                          <Clapperboard className="h-4 w-4 text-pink-300" />
+                          <span className="font-medium">{m.video?.model ?? "Video engine"}</span>
+                          {m.video?.free && <span className="nx-free-pill rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300">Free</span>}
+                          {m.video?.demo && <span className="rounded-full border border-white/10 bg-white/[0.05] px-1.5 py-px text-[9px] uppercase tracking-wide text-zinc-400">demo render</span>}
+                        </div>
+                        {m.streaming ? (
+                          <div className="relative mt-3 h-40 overflow-hidden rounded-xl border border-white/10 bg-[#0a0d18]">
+                            <div className="nx-render-sweep" />
+                            <div className="flex h-full flex-col items-center justify-center gap-2">
+                              <Loader2 className="h-5 w-5 animate-spin text-pink-300" />
+                              <span className="font-mono text-[11.5px] text-zinc-400">rendering frames · {eff.label} effort…</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {m.video?.videoUrl ? (
+                              <video src={m.video.videoUrl} controls poster={m.video.poster} className="mt-3 w-full rounded-xl border border-white/10" />
+                            ) : m.video?.poster ? (
+                              <img src={m.video.poster} alt="video keyframe" className="mt-3 w-full rounded-xl border border-white/10" />
+                            ) : null}
+                            {m.video?.storyboard && m.video.storyboard.length > 0 && (
+                              <div className="mt-2.5 space-y-1">
+                                {m.video.storyboard.map((s, i) => (
+                                  <div key={i} className="flex items-start gap-2 text-[11.5px] text-zinc-400">
+                                    <span className="mt-px shrink-0 rounded bg-white/[0.06] px-1.5 py-px font-mono text-[10px] text-pink-300">{String(i + 1).padStart(2, "0")}</span>
+                                    <span className="min-w-0">{s}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
                   ) : (
-                    <div key={m.id} className={cn("flex gap-3", m.role === "user" && "justify-end")}>
+                    <div key={m.id} className={cn("anim-msg flex gap-3", m.role === "user" && "justify-end")}>
                       {m.role === "assistant" && (
                         <Image src={asset("/logo.png")} alt="ChatUltra" width={30} height={30} className="mt-0.5 h-[30px] w-[30px] rounded-xl border border-white/10" unoptimized />
                       )}
@@ -669,10 +840,16 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
                         ) : (
                           <div className="rounded-2xl rounded-tl-md border border-white/[0.07] bg-white/[0.02] px-4 py-2">
                             {m.content ? (
-                              <Markdown content={m.content} className={fontCls} />
+                              <div className={m.streaming ? "nx-caret" : ""}>
+                                <Markdown content={m.content} className={fontCls} />
+                              </div>
                             ) : (
-                              <div className="flex items-center gap-2 py-1 text-[13px] text-zinc-400">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-300" />
+                              <div className="flex items-center gap-2.5 py-1.5 text-[13px] text-zinc-400">
+                                <span className="flex items-center gap-1">
+                                  <i className="nx-dot" />
+                                  <i className="nx-dot" />
+                                  <i className="nx-dot" />
+                                </span>
                                 <span className="font-mono text-[12px]">{currentModel?.name} is thinking ({eff.label} effort)…</span>
                               </div>
                             )}
@@ -826,6 +1003,9 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
                       <DropdownMenuItem onClick={() => onOpenSettings("github")} className="gap-2 text-[12.5px]">
                         <FolderGit2 className="h-3.5 w-3.5" /> Push to GitHub
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={onOpenCredits} className="gap-2 text-[12.5px]">
+                        <Zap className="h-3.5 w-3.5" /> Credits &amp; billing
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={onOpenAccount} className="gap-2 text-[12.5px]">
                         <CircleUserRound className="h-3.5 w-3.5" /> Account profile
                       </DropdownMenuItem>
@@ -867,8 +1047,20 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
                   </div>
                 </div>
               </div>
-              <div className="mt-1.5 text-center text-[10.5px] text-zinc-600">
-                ChatUltra runs commands, builds games, previews HTML and pushes to GitHub · Model: <span className="text-zinc-400">{currentModel?.name}</span> · Effort: <span className="text-zinc-400">{eff.label}</span>
+              <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10.5px] text-zinc-600">
+                <button
+                  onClick={onOpenCredits}
+                  className="flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.07] px-2 py-0.5 font-mono text-[10.5px] text-amber-300 transition hover:border-amber-400/50 hover:bg-amber-400/15"
+                  title="Credits & billing — free public models cost 0"
+                >
+                  <Zap className="h-3 w-3" /> {creditBalance.toLocaleString()} credits
+                </button>
+                <span>
+                  Model: <span className="text-zinc-400">{currentModel?.name}</span>
+                  {currentModel?.kind === "video" && <span className="ml-1 rounded-full border border-pink-400/30 bg-pink-400/10 px-1.5 py-px text-[9px] uppercase tracking-wide text-pink-300">video</span>}
+                  {currentModel?.free && <span className="ml-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] uppercase tracking-wide text-emerald-300">free</span>}
+                  · Effort: <span className="text-zinc-400">{eff.label}</span>
+                </span>
               </div>
             </div>
           </div>

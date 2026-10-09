@@ -11,7 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAccount, compressImage, hashPassword, type Account } from "@/lib/account";
-import { ImagePlus, Loader2, LogOut, CheckCircle2, UserRound } from "lucide-react";
+import { supabaseSyncAccount, supabaseConfigured, loadTurnstile, turnstileToken } from "@/lib/cloud";
+import { useSettings } from "@/lib/store";
+import { SupabaseIcon, CloudflareIcon } from "@/components/brand-icons";
+import { ImagePlus, Loader2, LogOut, CheckCircle2, UserRound, CloudUpload } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +45,8 @@ export function AccountDialog({ open, onOpenChange }: AccountDialogProps) {
   const [pBio, setPBio] = useState("");
   const [pWebsite, setPWebsite] = useState("");
   const [pAvatar, setPAvatar] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const turnstileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open && account) {
@@ -117,6 +122,25 @@ export function AccountDialog({ open, onOpenChange }: AccountDialogProps) {
     update({ username: name, bio: pBio.trim(), website: pWebsite.trim(), avatar: pAvatar });
     toast({ title: "Profile saved" });
     onOpenChange(false);
+  };
+
+  const syncToCloud = async () => {
+    if (!account) return;
+    if (!supabaseConfigured()) {
+      toast({ title: "Supabase not configured", description: "Add your project URL + anon key in Settings > Connections first." });
+      return;
+    }
+    setSyncing(true);
+    try {
+      const siteKey = useSettings.getState().connections.turnstileSiteKey;
+      if (siteKey) loadTurnstile(siteKey);
+      const token = siteKey && turnstileRef.current ? await turnstileToken(siteKey, turnstileRef.current) : null;
+      const { passHash: _drop, ...profile } = account;
+      const r = await supabaseSyncAccount(profile as Account);
+      toast({ title: r.ok ? "Synced to Supabase" : "Supabase sync failed", description: r.message });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const memberSince = account ? new Date(account.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
@@ -241,6 +265,24 @@ export function AccountDialog({ open, onOpenChange }: AccountDialogProps) {
               >
                 <LogOut className="h-4 w-4" /> Sign out
               </Button>
+            </div>
+            {/* cloud sync (Supabase + Turnstile) */}
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-[12px] text-zinc-300">
+                  <SupabaseIcon className="h-3.5 w-3.5 text-emerald-400" />
+                  Cloud sync
+                  <CloudflareIcon className="ml-1 h-3.5 w-3.5 text-orange-400" />
+                  <span className="text-[10.5px] text-zinc-500">Turnstile-ready</span>
+                </div>
+                <Button onClick={syncToCloud} disabled={syncing} className="h-7 gap-1.5 bg-emerald-500/15 px-2.5 text-[11.5px] text-emerald-200 hover:bg-emerald-500/25">
+                  {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CloudUpload className="h-3 w-3" />} Sync now
+                </Button>
+              </div>
+              <div ref={turnstileRef} className="mt-2 empty:hidden" />
+              <p className="mt-1.5 text-[10.5px] leading-relaxed text-zinc-500">
+                Push this profile (avatar, bio, website) to your Supabase project. Configure it in Settings &gt; Connections — schema in backend/supabase/schema.sql.
+              </p>
             </div>
           </div>
         )}

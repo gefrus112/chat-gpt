@@ -23,15 +23,35 @@ export interface ConnectionSettings {
   /** Anthropic API key (sk-ant-...) — enables real Claude models straight from the browser */
   anthropicKey: string;
   anthropicOk: boolean;
+  /** ChatUltra backend server (backend/ folder) — real generation with API keys */
+  backendUrl: string;
+  backendKey: string;
+  backendOk: boolean;
+  /** Supabase project — cloud account sync */
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  supabaseOk: boolean;
+  /** Cloudflare Turnstile site key — protects account signup */
+  turnstileSiteKey: string;
+}
+
+export interface CreditsState {
+  balance: number;
+  totalBought: number;
+  totalSpent: number;
 }
 
 interface SettingsState {
   gh: GitHubSettings;
   appearance: AppearanceSettings;
   connections: ConnectionSettings;
+  credits: CreditsState;
   setGh: (g: Partial<GitHubSettings>) => void;
   setAppearance: (a: Partial<AppearanceSettings>) => void;
   setConnections: (c: Partial<ConnectionSettings>) => void;
+  setCredits: (c: Partial<CreditsState>) => void;
+  grantCredits: (n: number) => void;
+  spendCredits: (n: number) => boolean;
 }
 
 export const ACCENTS: { id: string; label: string; hex: string }[] = [
@@ -50,10 +70,30 @@ export const useSettings = create<SettingsState>()(
     (set) => ({
       gh: { token: "", repo: DEFAULT_REPO, branch: "main", connected: false },
       appearance: { accent: "#22d3ee", fontSize: "md", glow: true, compactSidebar: false, monoMsg: false },
-      connections: { anthropicKey: "", anthropicOk: false },
+      connections: {
+        anthropicKey: "",
+        anthropicOk: false,
+        backendUrl: "",
+        backendKey: "",
+        backendOk: false,
+        supabaseUrl: "",
+        supabaseAnonKey: "",
+        supabaseOk: false,
+        turnstileSiteKey: "",
+      },
+      credits: { balance: 240, totalBought: 0, totalSpent: 0 },
       setGh: (g) => set((s) => ({ gh: { ...s.gh, ...g } })),
       setAppearance: (a) => set((s) => ({ appearance: { ...s.appearance, ...a } })),
       setConnections: (c) => set((s) => ({ connections: { ...s.connections, ...c } })),
+      setCredits: (c) => set((s) => ({ credits: { ...s.credits, ...c } })),
+      grantCredits: (n) =>
+        set((s) => ({ credits: { ...s.credits, balance: s.credits.balance + n, totalBought: s.credits.totalBought + n } })),
+      spendCredits: (n) => {
+        const cur = useSettings.getState().credits;
+        if (cur.balance < n) return false;
+        set({ credits: { ...cur, balance: cur.balance - n, totalSpent: cur.totalSpent + n } });
+        return true;
+      },
     }),
     { name: "chatultra-settings" }
   )

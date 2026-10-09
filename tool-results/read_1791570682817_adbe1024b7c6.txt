@@ -1,0 +1,895 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import Image from "next/image";
+     5→import {
+     6→  ArrowUp,
+     7→  Loader2,
+     8→  Square,
+     9→  Gamepad2,
+    10→  Globe,
+    11→  Brain,
+    12→  Joystick,
+    13→  SlidersHorizontal,
+    14→  SquareTerminal,
+    15→  Paperclip,
+    16→  MoreHorizontal,
+    17→  Mic,
+    18→  MessageSquarePlus,
+    19→  Download,
+    20→  FolderGit2,
+    21→  CircleUserRound,
+    22→  Settings,
+    23→  TerminalSquare,
+    24→} from "lucide-react";
+    25→import { Markdown, StudioContext } from "@/components/markdown";
+    26→import { ModelPicker, EffortBars } from "@/components/model-picker";
+    27→import { PreviewPanel } from "@/components/preview-panel";
+    28→import { ChatTerminal } from "@/components/chat-terminal";
+    29→import { ChatShell, resultToText } from "@/lib/shell";
+    30→import type { SettingsTab } from "@/components/settings-dialog";
+    31→import { findEffort, EFFORTS, PROVIDER_LABEL, type EffortDef, type ModelDef } from "@/lib/models";
+    32→import { demoReply, streamDemoReply } from "@/lib/demo-ai";
+    33→import { callClaude } from "@/lib/claude-direct";
+    34→import { useSettings, ACCENTS } from "@/lib/store";
+    35→import { asset } from "@/lib/asset";
+    36→import { toast } from "@/hooks/use-toast";
+    37→import {
+    38→  Popover,
+    39→  PopoverContent,
+    40→  PopoverTrigger,
+    41→} from "@/components/ui/popover";
+    42→import {
+    43→  DropdownMenu,
+    44→  DropdownMenuTrigger,
+    45→  DropdownMenuContent,
+    46→  DropdownMenuItem,
+    47→} from "@/components/ui/dropdown-menu";
+    48→import { cn } from "@/lib/utils";
+    49→
+    50→export interface ChatMessage {
+    51→  id: string;
+    52→  role: "user" | "assistant";
+    53→  content: string;
+    54→  model?: string;
+    55→  effort?: string;
+    56→  streaming?: boolean;
+    57→  /** command execution card (slash commands / shell runs) */
+    58→  kind?: "command";
+    59→  cmd?: string;
+    60→  output?: string;
+    61→  ok?: boolean;
+    62→}
+    63→
+    64→interface ChatViewProps {
+    65→  models: ModelDef[];
+    66→  model: string;
+    67→  effort: string;
+    68→  conversationId: string | null;
+    69→  terminalSignal: number;
+    70→  onModel: (id: string) => void;
+    71→  onEffort: (id: EffortDef["id"]) => void;
+    72→  onConversationCreated: (id: string) => void;
+    73→  onOpenSettings: (tab?: SettingsTab) => void;
+    74→  onOpenAccount: () => void;
+    75→  onNewChat: () => void;
+    76→}
+    77→
+    78→const SUGGESTIONS: { icon: React.ReactNode; title: string; prompt: string }[] = [
+    79→  { icon: <Gamepad2 className="h-4 w-4 text-cyan-300" />, title: "Build a game", prompt: "Build a complete playable neon arcade game — a wave-based space shooter with powerups, score and restart. Give me the full single-file HTML." },
+    80→  { icon: <Globe className="h-4 w-4 text-violet-300" />, title: "Create a website", prompt: "Create a stunning dark-themed portfolio website for a game developer, single-file HTML with smooth animations and a hero section." },
+    81→  { icon: <Brain className="h-4 w-4 text-amber-300" />, title: "Explain anything", prompt: "Explain how neural networks learn, with a small interactive HTML visualization I can play with." },
+    82→  { icon: <Joystick className="h-4 w-4 text-rose-300" />, title: "Remix a classic", prompt: "Build a complete single-file HTML snake game with neon glow, wrap-around walls, increasing speed and a high-score counter." },
+    83→];
+    84→
+    85→const SLASH_COMMANDS: { name: string; desc: string }[] = [
+    86→  { name: "/help", desc: "Show all slash commands" },
+    87→  { name: "/models", desc: "List every loaded AI model" },
+    88→  { name: "/model <name>", desc: "Switch model — /model opus" },
+    89→  { name: "/effort <level>", desc: "low medium high extra max ultra" },
+    90→  { name: "/run <cmd>", desc: "Run a shell command — /run neofetch" },
+    91→  { name: "/terminal", desc: "Open the built-in terminal" },
+    92→  { name: "/ls", desc: "List project files" },
+    93→  { name: "/cat <file>", desc: "Print a project file" },
+    94→  { name: "/npm <args>", desc: "npm install, npm run dev..." },
+    95→  { name: "/git <sub>", desc: "git status, git log, git push" },
+    96→  { name: "/web", desc: "Toggle web access for replies" },
+    97→  { name: "/game <desc>", desc: "Build a playable game from a description" },
+    98→  { name: "/export", desc: "Download this chat as Markdown" },
+    99→  { name: "/push", desc: "Open GitHub push settings" },
+   100→  { name: "/account", desc: "Open your account profile" },
+   101→  { name: "/settings", desc: "Open settings" },
+   102→  { name: "/theme <accent>", desc: "cyan violet emerald amber rose sky" },
+   103→  { name: "/clear", desc: "Start a fresh chat" },
+   104→];
+   105→
+   106→const ARGLESS = new Set(["/help", "/models", "/terminal", "/ls", "/web", "/export", "/push", "/account", "/settings", "/clear"]);
+   107→
+   108→export function ChatView({ models, model, effort, conversationId, terminalSignal, onModel, onEffort, onConversationCreated, onOpenSettings, onOpenAccount, onNewChat }: ChatViewProps) {
+   109→  const [messages, setMessages] = useState<ChatMessage[]>([]);
+   110→  const [input, setInput] = useState("");
+   111→  const [busy, setBusy] = useState(false);
+   112→  const [preview, setPreview] = useState<{ code: string; title: string } | null>(null);
+   113→  const [termOpen, setTermOpen] = useState(false);
+   114→  const [webAccess, setWebAccess] = useState(false);
+   115→  const [listening, setListening] = useState(false);
+   116→  const [effortOpen, setEffortOpen] = useState(false);
+   117→  const [slashSel, setSlashSel] = useState(0);
+   118→  const scrollRef = useRef<HTMLDivElement>(null);
+   119→  const taRef = useRef<HTMLTextAreaElement>(null);
+   120→  const abortRef = useRef<AbortController | null>(null);
+   121→  const convRef = useRef<string | null>(conversationId);
+   122→  const fileRef = useRef<HTMLInputElement>(null);
+   123→  const recRef = useRef<{ stop: () => void } | null>(null);
+   124→
+   125→  const shellRef = useRef<ChatShell | null>(null);
+   126→  if (!shellRef.current) shellRef.current = new ChatShell();
+   127→  const shell = shellRef.current;
+   128→
+   129→  const gh = useSettings((s) => s.gh);
+   130→  const setAppearance = useSettings((s) => s.setAppearance);
+   131→  const appearance = useSettings((s) => s.appearance);
+   132→
+   133→  useEffect(() => {
+   134→    convRef.current = conversationId;
+   135→  }, [conversationId]);
+   136→
+   137→  useEffect(() => {
+   138→    shell.setModelsProvider(() => models.map((m) => `${m.name} (${PROVIDER_LABEL[m.provider] ?? m.provider})`));
+   139→  }, [models, shell]);
+   140→
+   141→  // rail / sidebar terminal button opens the drawer
+   142→  useEffect(() => {
+   143→    if (terminalSignal > 0) setTermOpen(true);
+   144→  }, [terminalSignal]);
+   145→
+   146→  // Ctrl+` toggles the terminal drawer
+   147→  useEffect(() => {
+   148→    const onWin = (e: KeyboardEvent) => {
+   149→      if (e.ctrlKey && e.key === "`") {
+   150→        e.preventDefault();
+   151→        setTermOpen((t) => !t);
+   152→      }
+   153→    };
+   154→    window.addEventListener("keydown", onWin);
+   155→    return () => window.removeEventListener("keydown", onWin);
+   156→  }, []);
+   157→
+   158→  const currentModel = models.find((m) => m.id === model) ?? models[0];
+   159→  const eff = findEffort(effort);
+   160→
+   161→  const openPreview = useCallback((code: string, title?: string) => {
+   162→    setPreview({ code, title: title ?? "Canvas" });
+   163→  }, []);
+   164→
+   165→  const runCommand = useCallback(
+   166→    async (cmd: string): Promise<string> => resultToText(await shell.run(cmd)),
+   167→    [shell]
+   168→  );
+   169→
+   170→  // load conversation when switching
+   171→  useEffect(() => {
+   172→    if (!conversationId) {
+   173→      setMessages([]);
+   174→      return;
+   175→    }
+   176→    let alive = true;
+   177→    fetch(`/api/conversations/${conversationId}`)
+   178→      .then((r) => r.json())
+   179→      .then((d) => {
+   180→        if (!alive || !d.conversation) return;
+   181→        setMessages(
+   182→          d.conversation.messages.map((m: { id: string; role: string; content: string; model?: string; effort?: string }) => ({
+   183→            id: m.id,
+   184→            role: m.role as "user" | "assistant",
+   185→            content: m.content,
+   186→            model: m.model,
+   187→            effort: m.effort,
+   188→          }))
+   189→        );
+   190→        if (d.conversation.model) onModel(d.conversation.model);
+   191→      })
+   192→      .catch(() => setMessages([]));
+   193→    return () => {
+   194→      alive = false;
+   195→    };
+   196→  }, [conversationId]);
+   197→
+   198→  useEffect(() => {
+   199→    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+   200→  }, [messages]);
+   201→
+   202→  /* ---------------- slash commands ---------------- */
+   203→
+   204→  const appendCommand = (cmd: string, output: string, ok = true) => {
+   205→    setMessages((m) => [...m, { id: `c-${Date.now()}`, role: "user", kind: "command", cmd, output, ok, content: "" }]);
+   206→  };
+   207→
+   208→  const handleSlash = async (raw: string) => {
+   209→    const text = raw.trim();
+   210→    const [name, ...rest] = text.split(/\s+/);
+   211→    const arg = rest.join(" ").trim();
+   212→
+   213→    switch (name) {
+   214→      case "/help":
+   215→        appendCommand(
+   216→          name,
+   217→          "ChatUltra commands:\n" + SLASH_COMMANDS.map((c) => `  ${c.name.padEnd(18)} ${c.desc}`).join("\n") +
+   218→            "\n\nShell commands (use /run or the terminal): ls cd cat echo touch mkdir rm run build git npm node python ps df uname neofetch whoami date history"
+   219→        );
+   220→        return;
+   221→      case "/models":
+   222→        appendCommand(name, "loaded models:\n" + models.map((m) => `  - ${m.name} (${PROVIDER_LABEL[m.provider] ?? m.provider})${m.id === model ? "  [active]" : ""}`).join("\n"));
+   223→        return;
+   224→      case "/model": {
+   225→        const q = arg.toLowerCase();
+   226→        const hit = models.find((m) => m.id === arg || m.name.toLowerCase() === q) ?? models.find((m) => m.name.toLowerCase().includes(q) && q.length > 0);
+   227→        if (!hit) {
+   228→          appendCommand(text, `model not found: "${arg}"\navailable:\n` + models.map((m) => `  - ${m.name}`).join("\n"), false);
+   229→          return;
+   230→        }
+   231→        onModel(hit.id);
+   232→        appendCommand(text, `[ok] switched to ${hit.name}`);
+   233→        return;
+   234→      }
+   235→      case "/effort": {
+   236→        const e = EFFORTS.find((x) => x.id === arg.toLowerCase());
+   237→        if (!e) {
+   238→          appendCommand(text, `unknown effort "${arg}" — levels: ${EFFORTS.map((x) => x.id).join(", ")}`, false);
+   239→          return;
+   240→        }
+   241→        onEffort(e.id);
+   242→        appendCommand(text, `[ok] reasoning effort set to ${e.label}`);
+   243→        return;
+   244→      }
+   245→      case "/run":
+   246→        if (!arg) {
+   247→          appendCommand(name, "usage: /run <command> — try /run neofetch", false);
+   248→          return;
+   249→        }
+   250→        appendCommand(arg, resultToText(await shell.run(arg)));
+   251→        return;
+   252→      case "/ls":
+   253→        appendCommand(name, resultToText(await shell.run("ls")));
+   254→        return;
+   255→      case "/cat":
+   256→        if (!arg) {
+   257→          appendCommand(name, "usage: /cat <file> — try /cat README.md", false);
+   258→          return;
+   259→        }
+   260→        appendCommand(`${name} ${arg}`, resultToText(await shell.run(`cat ${arg}`)));
+   261→        return;
+   262→      case "/npm":
+   263→        appendCommand(text, resultToText(await shell.run(`npm ${arg || "--help"}`.trim())));
+   264→        return;
+   265→      case "/git":
+   266→        if (!arg) {
+   267→          appendCommand(name, "usage: /git <status|log|push>", false);
+   268→          return;
+   269→        }
+   270→        appendCommand(text, resultToText(await shell.run(`git ${arg}`)));
+   271→        return;
+   272→      case "/terminal":
+   273→        setTermOpen(true);
+   274→        appendCommand(name, "[ok] terminal opened — type `help` inside");
+   275→        return;
+   276→      case "/web":
+   277→        setWebAccess((w) => {
+   278→          appendCommand(name, `[ok] web access ${!w ? "enabled" : "disabled"}`);
+   279→          return !w;
+   280→        });
+   281→        return;
+   282→      case "/game":
+   283→        appendCommand(name, arg ? `[ok] building game: ${arg}` : "usage: /game <description> — try /game neon pong", Boolean(arg));
+   284→        if (arg) send(`Build a complete playable single-file HTML game: ${arg}. Full HTML in one code block.`);
+   285→        return;
+   286→      case "/export": {
+   287→        const md =
+   288→          "# ChatUltra chat export\n\n" +
+   289→          messages
+   290→            .map((m) =>
+   291→              m.kind === "command"
+   292→                ? `\`\`\`console\n$ ${m.cmd}\n${m.output ?? ""}\n\`\`\``
+   293→                : `**${m.role === "user" ? "You" : m.model || "ChatUltra"}**\n\n${m.content}`
+   294→            )
+   295→            .join("\n\n---\n\n");
+   296→        try {
+   297→          const blob = new Blob([md], { type: "text/markdown" });
+   298→          const a = document.createElement("a");
+   299→          a.href = URL.createObjectURL(blob);
+   300→          a.download = "chatultra-chat.md";
+   301→          a.click();
+   302→          URL.revokeObjectURL(a.href);
+   303→          appendCommand(name, "[ok] exported chatultra-chat.md");
+   304→        } catch {
+   305→          appendCommand(name, "[err] export failed in this browser", false);
+   306→        }
+   307→        return;
+   308→      }
+   309→      case "/push":
+   310→        onOpenSettings("github");
+   311→        appendCommand(name, "[ok] opening GitHub settings — token + repo are prefilled");
+   312→        return;
+   313→      case "/account":
+   314→        onOpenAccount();
+   315→        appendCommand(name, "[ok] opening account profile");
+   316→        return;
+   317→      case "/settings":
+   318→        onOpenSettings("appearance");
+   319→        appendCommand(name, "[ok] opening settings");
+   320→        return;
+   321→      case "/theme": {
+   322→        const a = ACCENTS.find((x) => x.id === arg.toLowerCase());
+   323→        if (!a) {
+   324→          appendCommand(text, `unknown accent "${arg}" — options: ${ACCENTS.map((x) => x.id).join(", ")}`, false);
+   325→          return;
+   326→        }
+   327→        setAppearance({ accent: a.hex });
+   328→        appendCommand(text, `[ok] accent set to ${a.label} (${a.hex})`);
+   329→        return;
+   330→      }
+   331→      case "/clear":
+   332→        onNewChat();
+   333→        return;
+   334→      default:
+   335→        appendCommand(name, `unknown command: ${name} — type /help`, false);
+   336→    }
+   337→  };
+   338→
+   339→  /* ---------------- send ---------------- */
+   340→
+   341→  const send = async (text?: string) => {
+   342→    const msg = (text ?? input).trim();
+   343→    if (!msg || busy) return;
+   344→    if (msg.startsWith("/")) {
+   345→      setInput("");
+   346→      if (taRef.current) taRef.current.style.height = "auto";
+   347→      await handleSlash(msg);
+   348→      return;
+   349→    }
+   350→    setInput("");
+   351→    if (taRef.current) taRef.current.style.height = "auto";
+   352→    setBusy(true);
+   353→
+   354→    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content: msg };
+   355→    const aiId = `a-${Date.now()}`;
+   356→    setMessages((m) => [...m, userMsg, { id: aiId, role: "assistant", content: "", model, effort, streaming: true }]);
+   357→
+   358→    const ctrl = new AbortController();
+   359→    abortRef.current = ctrl;
+   360→
+   361→    let gotDelta = false;
+   362→    try {
+   363→      const res = await fetch("/api/chat", {
+   364→        method: "POST",
+   365→        headers: { "Content-Type": "application/json" },
+   366→        body: JSON.stringify({ message: msg, model, effort, conversationId: convRef.current }),
+   367→        signal: ctrl.signal,
+   368→      });
+   369→      if (!res.ok || !res.body) {
+   370→        const j = await res.json().catch(() => ({}));
+   371→        throw new Error(j.error || `HTTP ${res.status}`);
+   372→      }
+   373→      const reader = res.body.getReader();
+   374→      const decoder = new TextDecoder();
+   375→      let buf = "";
+   376→      for (;;) {
+   377→        const { done, value } = await reader.read();
+   378→        if (done) break;
+   379→        buf += decoder.decode(value, { stream: true });
+   380→        const lines = buf.split("\n");
+   381→        buf = lines.pop() ?? "";
+   382→        for (const line of lines) {
+   383→          if (!line.trim()) continue;
+   384→          try {
+   385→            const evt = JSON.parse(line);
+   386→            if (evt.type === "meta" && evt.conversationId) {
+   387→              if (!convRef.current) {
+   388→                convRef.current = evt.conversationId;
+   389→                onConversationCreated(evt.conversationId);
+   390→              }
+   391→            } else if (evt.type === "delta") {
+   392→              gotDelta = true;
+   393→              setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: x.content + evt.text } : x)));
+   394→            } else if (evt.type === "error") {
+   395→              throw new Error(evt.error);
+   396→            }
+   397→          } catch (e) {
+   398→            if (e instanceof Error && e.message !== "Unexpected end of JSON input") {
+   399→              if (e.message.startsWith("HTTP") || e.message.includes("failed")) throw e;
+   400→            }
+   401→          }
+   402→        }
+   403→      }
+   404→    } catch (err) {
+   405→      const aborted = err instanceof DOMException && err.name === "AbortError";
+   406→      if (!aborted && !gotDelta) {
+   407→        // static hosting (e.g. GitHub Pages) has no backend — pick the best brain:
+   408→        // 1) real Claude via the Anthropic API when the model + key are available
+   409→        // 2) built-in demo brain otherwise
+   410→        const provider = currentModel?.provider;
+   411→        const anthropicKey = useSettings.getState().connections.anthropicKey;
+   412→        if (provider === "anthropic" && anthropicKey) {
+   413→          const sys =
+   414→            `You are ${currentModel?.name ?? "Claude"}, running inside ChatUltra, a dark Codex-style AI studio. ` +
+   415→            "Answer in Markdown, always wrap code in fenced blocks with a language tag, and for any web page, game or UI request " +
+   416→            "produce a COMPLETE single-file HTML document (inline CSS/JS) inside one ```html block. " +
+   417→            `Effort level: ${eff.label}. ${eff.directive}`;
+   418→          const turns = [
+   419→            ...messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+   420→            { role: "user" as const, content: msg },
+   421→          ];
+   422→          const r = await callClaude(anthropicKey, turns, sys, 4096);
+   423→          if (r.ok && r.text) {
+   424→            await streamDemoReply(
+   425→              r.text,
+   426→              (text) => setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: text } : x))),
+   427→              ctrl.signal
+   428→            );
+   429→          } else {
+   430→            toast({ title: "Claude call failed — switched to the local engine", description: r.error });
+   431→            const reply = demoReply(msg);
+   432→            await streamDemoReply(
+   433→              reply,
+   434→              (text) => setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: text } : x))),
+   435→              ctrl.signal
+   436→            );
+   437→          }
+   438→        } else {
+   439→          if (provider === "anthropic" && !anthropicKey) {
+   440→            toast({
+   441→              title: "Demo engine",
+   442→              description: `Paste an Anthropic API key in Settings > Connections to chat with ${currentModel?.name} for real.`,
+   443→            });
+   444→          }
+   445→          const reply = demoReply(msg);
+   446→          await streamDemoReply(
+   447→            reply,
+   448→            (text) => setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: text } : x))),
+   449→            ctrl.signal
+   450→          );
+   451→        }
+   452→      } else {
+   453→        setMessages((m) =>
+   454→          m.map((x) =>
+   455→            x.id === aiId
+   456→              ? { ...x, content: x.content || (aborted ? "_stopped._" : `Error: ${err instanceof Error ? err.message : "Something went wrong — try again."}`) }
+   457→              : x
+   458→          )
+   459→        );
+   460→      }
+   461→    } finally {
+   462→      setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, streaming: false } : x)));
+   463→      setBusy(false);
+   464→      abortRef.current = null;
+   465→    }
+   466→  };
+   467→
+   468→  const stop = () => abortRef.current?.abort();
+   469→
+   470→  /* ---------------- voice input ---------------- */
+   471→
+   472→  const startVoice = () => {
+   473→    type Rec = { start: () => void; stop: () => void; onresult: ((e: { results: { 0: { 0: { transcript: string } } } }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; continuous: boolean; interimResults: boolean; lang: string };
+   474→    const w = window as unknown as { SpeechRecognition?: new () => Rec; webkitSpeechRecognition?: new () => Rec };
+   475→    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+   476→    if (!Ctor) {
+   477→      toast({ title: "Voice input unavailable", description: "This browser does not support speech recognition — try Chrome or Edge." });
+   478→      return;
+   479→    }
+   480→    if (listening) {
+   481→      recRef.current?.stop();
+   482→      return;
+   483→    }
+   484→    const rec = new Ctor();
+   485→    rec.continuous = false;
+   486→    rec.interimResults = false;
+   487→    rec.lang = "en-US";
+   488→    rec.onresult = (e) => {
+   489→      const t = e.results?.[0]?.[0]?.transcript ?? "";
+   490→      if (t) setInput((prev) => (prev ? prev + " " : "") + t);
+   491→    };
+   492→    rec.onend = () => {
+   493→      setListening(false);
+   494→      recRef.current = null;
+   495→    };
+   496→    rec.onerror = () => {
+   497→      setListening(false);
+   498→      recRef.current = null;
+   499→    };
+   500→    recRef.current = rec;
+   501→    setListening(true);
+   502→    rec.start();
+   503→  };
+   504→
+   505→  /* ---------------- attach ---------------- */
+   506→
+   507→  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   508→    const f = e.target.files?.[0];
+   509→    e.target.value = "";
+   510→    if (!f) return;
+   511→    if (f.size > 80 * 1024) {
+   512→      toast({ title: "File too large", description: "Attach text files under 80 kB." });
+   513→      return;
+   514→    }
+   515→    const text = await f.text();
+   516→    const ext = f.name.split(".").pop()?.toLowerCase() ?? "txt";
+   517→    const lang = ["html", "css", "js", "ts", "json", "md", "csv", "xml", "svg"].includes(ext) ? ext : "text";
+   518→    setInput((prev) => `${prev}${prev ? "\n" : ""}[Attached file: ${f.name}]\n\`\`\`${lang}\n${text}\n\`\`\``);
+   519→    taRef.current?.focus();
+   520→  };
+   521→
+   522→  /* ---------------- slash autocomplete ---------------- */
+   523→
+   524→  const slashQuery = useMemo(() => {
+   525→    const m = /^\/[a-z]*$/i.exec(input.trim());
+   526→    return m ? m[0].toLowerCase() : null;
+   527→  }, [input]);
+   528→  const slashFiltered = useMemo(
+   529→    () => (slashQuery === null ? [] : SLASH_COMMANDS.filter((c) => c.name.startsWith(slashQuery))),
+   530→    [slashQuery]
+   531→  );
+   532→  const slashOpen = slashFiltered.length > 0;
+   533→
+   534→  useEffect(() => setSlashSel(0), [slashQuery]);
+   535→
+   536→  const execFromMenu = (name: string) => {
+   537→    if (ARGLESS.has(name)) {
+   538→      handleSlash(name);
+   539→      setInput("");
+   540→      return;
+   541→    }
+   542→    setInput(name.split(" ")[0] + " ");
+   543→    taRef.current?.focus();
+   544→  };
+   545→
+   546→  const onTaKey = (e: React.KeyboardEvent) => {
+   547→    if (slashOpen) {
+   548→      if (e.key === "ArrowDown") {
+   549→        e.preventDefault();
+   550→        setSlashSel((s) => (s + 1) % slashFiltered.length);
+   551→        return;
+   552→      }
+   553→      if (e.key === "ArrowUp") {
+   554→        e.preventDefault();
+   555→        setSlashSel((s) => (s - 1 + slashFiltered.length) % slashFiltered.length);
+   556→        return;
+   557→      }
+   558→      if (e.key === "Tab") {
+   559→        e.preventDefault();
+   560→        execFromMenu(slashFiltered[slashSel].name);
+   561→        return;
+   562→      }
+   563→      if (e.key === "Enter") {
+   564→        e.preventDefault();
+   565→        execFromMenu(slashFiltered[slashSel].name);
+   566→        return;
+   567→      }
+   568→      if (e.key === "Escape") {
+   569→        e.preventDefault();
+   570→        setInput("");
+   571→        return;
+   572→      }
+   573→    }
+   574→    if (e.key === "Enter" && !e.shiftKey) {
+   575→      e.preventDefault();
+   576→      send();
+   577→    }
+   578→  };
+   579→
+   580→  const fontCls = eff.id === "ultra" ? "text-zinc-300" : "";
+   581→  const toolBtn = "flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/[0.07] hover:text-zinc-100";
+   582→  const toolBtnActive = "flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-400/15 text-cyan-300 transition hover:bg-cyan-400/25";
+   583→
+   584→  return (
+   585→    <StudioContext.Provider value={{ openPreview, runCommand, openTerminal: () => setTermOpen(true) }}>
+   586→      <div className="flex h-full min-h-0 flex-1">
+   587→        <div className="flex min-w-0 flex-1 flex-col">
+   588→          {messages.length === 0 ? (
+   589→            /* ---------- welcome ---------- */
+   590→            <div className="flex flex-1 flex-col items-center justify-center px-4">
+   591→              <div className={cn("relative mb-5", "animate-[nxPulse_4s_ease-in-out_infinite]")}>
+   592→                <Image
+   593→                  src={asset("/logo.png")}
+   594→                  alt="ChatUltra AI"
+   595→                  width={110}
+   596→                  height={110}
+   597→                  className="rounded-3xl border border-white/10 shadow-2xl shadow-cyan-500/20"
+   598→                  priority
+   599→                  unoptimized
+   600→                />
+   601→              </div>
+   602→              <h1 className="bg-gradient-to-r from-cyan-200 via-white to-violet-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
+   603→                ChatUltra
+   604→              </h1>
+   605→              <p className="mt-2 text-[13.5px] text-zinc-400">
+   606→                Chat · Build games · Run commands · Ship to GitHub — your Codex-grade AI workspace
+   607→              </p>
+   608→              <div className="mt-8 grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
+   609→                {SUGGESTIONS.map((s) => (
+   610→                  <button
+   611→                    key={s.title}
+   612→                    onClick={() => send(s.prompt)}
+   613→                    className="group rounded-xl border border-white/10 bg-white/[0.03] p-3.5 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/[0.06]"
+   614→                  >
+   615→                    <div className="text-[13px] font-medium text-zinc-100">
+   616→                      <span className="mr-1.5">{s.icon}</span>
+   617→                      {s.title}
+   618→                    </div>
+   619→                    <div className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-zinc-500 group-hover:text-zinc-400">
+   620→                      {s.prompt}
+   621→                    </div>
+   622→                  </button>
+   623→                ))}
+   624→              </div>
+   625→              <div className="mt-5 flex items-center gap-2 text-[11.5px] text-zinc-600">
+   626→                <TerminalSquare className="h-3.5 w-3.5" />
+   627→                Type <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/</code> for commands — try <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/run neofetch</code>
+   628→              </div>
+   629→            </div>
+   630→          ) : (
+   631→            /* ---------- messages ---------- */
+   632→            <div ref={scrollRef} className="chatultra-scroll min-h-0 flex-1 overflow-y-auto px-4 py-6">
+   633→              <div className="mx-auto flex max-w-3xl flex-col gap-6">
+   634→                {messages.map((m) =>
+   635→                  m.kind === "command" ? (
+   636→                    /* ---------- command execution card ---------- */
+   637→                    <div key={m.id} className="overflow-hidden rounded-xl border border-white/10 bg-[#05070d] font-mono">
+   638→                      <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-1.5">
+   639→                        <SquareTerminal className="h-3 w-3 text-emerald-400" />
+   640→                        <span className="text-[10px] uppercase tracking-wider text-zinc-500">chatultra-shell</span>
+   641→                        <span className={cn("ml-auto text-[10px]", m.ok ? "text-emerald-500" : "text-rose-500")}>{m.ok ? "exit 0" : "exit 1"}</span>
+   642→                      </div>
+   643→                      <div className="px-3 py-2.5">
+   644→                        <div className="flex gap-2">
+   645→                          <span className="shrink-0 text-emerald-400">$</span>
+   646→                          <span className="min-w-0 break-all text-zinc-100">{m.cmd}</span>
+   647→                        </div>
+   648→                        {m.output ? (
+   649→                          <pre className="chatultra-scroll mt-2 max-h-[280px] overflow-auto whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-zinc-300">
+   650→                            {m.output}
+   651→                          </pre>
+   652→                        ) : (
+   653→                          <div className="mt-2 flex items-center gap-2 text-[11.5px] text-zinc-500">
+   654→                            <Loader2 className="h-3 w-3 animate-spin" /> running…
+   655→                          </div>
+   656→                        )}
+   657→                      </div>
+   658→                    </div>
+   659→                  ) : (
+   660→                    <div key={m.id} className={cn("flex gap-3", m.role === "user" && "justify-end")}>
+   661→                      {m.role === "assistant" && (
+   662→                        <Image src={asset("/logo.png")} alt="ChatUltra" width={30} height={30} className="mt-0.5 h-[30px] w-[30px] rounded-xl border border-white/10" unoptimized />
+   663→                      )}
+   664→                      <div className={cn("min-w-0", m.role === "user" ? "max-w-[85%]" : "max-w-full flex-1")}>
+   665→                        {m.role === "user" ? (
+   666→                          <div className="rounded-2xl rounded-tr-md border border-cyan-400/20 bg-cyan-400/[0.08] px-4 py-2.5 text-[14px] leading-relaxed text-zinc-100 whitespace-pre-wrap">
+   667→                            {m.content}
+   668→                          </div>
+   669→                        ) : (
+   670→                          <div className="rounded-2xl rounded-tl-md border border-white/[0.07] bg-white/[0.02] px-4 py-2">
+   671→                            {m.content ? (
+   672→                              <Markdown content={m.content} className={fontCls} />
+   673→                            ) : (
+   674→                              <div className="flex items-center gap-2 py-1 text-[13px] text-zinc-400">
+   675→                                <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-300" />
+   676→                                <span className="font-mono text-[12px]">{currentModel?.name} is thinking ({eff.label} effort)…</span>
+   677→                              </div>
+   678→                            )}
+   679→                            {!m.streaming && m.content && (
+   680→                              <div className="mt-1.5 flex items-center gap-2 border-t border-white/5 pt-1.5 text-[10.5px] text-zinc-600">
+   681→                                {m.model && <span className="font-mono">{m.model}</span>}
+   682→                                {m.effort && <span>· effort {m.effort}</span>}
+   683→                              </div>
+   684→                            )}
+   685→                          </div>
+   686→                        )}
+   687→                      </div>
+   688→                      {m.role === "user" && (
+   689→                        <div className="mt-0.5 flex h-[30px] w-[30px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-[11px] font-semibold text-zinc-300">
+   690→                          You
+   691→                        </div>
+   692→                      )}
+   693→                    </div>
+   694→                  )
+   695→                )}
+   696→              </div>
+   697→            </div>
+   698→          )}
+   699→
+   700→          {/* ---------- composer ---------- */}
+   701→          <div className="shrink-0 px-4 pb-4">
+   702→            <div className="mx-auto max-w-3xl">
+   703→              <div className="relative rounded-2xl border border-white/10 bg-[#0c101c] shadow-xl shadow-black/40 transition focus-within:border-cyan-400/30">
+   704→                {/* slash command popup */}
+   705→                {slashOpen && (
+   706→                  <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-white/10 bg-[#0c101c] shadow-2xl shadow-black/60">
+   707→                    <div className="chatultra-scroll max-h-[264px] overflow-y-auto p-1.5">
+   708→                      {slashFiltered.map((c, i) => (
+   709→                        <button
+   710→                          key={c.name}
+   711→                          onMouseEnter={() => setSlashSel(i)}
+   712→                          onClick={() => execFromMenu(c.name)}
+   713→                          className={cn(
+   714→                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition",
+   715→                            i === slashSel ? "bg-cyan-400/10" : "hover:bg-white/[0.05]"
+   716→                          )}
+   717→                        >
+   718→                          <span className="w-32 shrink-0 font-mono text-[12.5px] font-medium text-cyan-300">{c.name}</span>
+   719→                          <span className="truncate text-[12px] text-zinc-400">{c.desc}</span>
+   720→                        </button>
+   721→                      ))}
+   722→                    </div>
+   723→                    <div className="border-t border-white/[0.07] px-3 py-1.5 text-[10px] text-zinc-600">Tab to complete · Enter to run · Esc to dismiss</div>
+   724→                  </div>
+   725→                )}
+   726→
+   727→                <textarea
+   728→                  ref={taRef}
+   729→                  value={input}
+   730→                  onChange={(e) => setInput(e.target.value)}
+   731→                  onKeyDown={onTaKey}
+   732→                  rows={1}
+   733→                  placeholder="Ask ChatUltra to build, explain or ship anything — or type / for commands"
+   734→                  className="chatultra-scroll max-h-40 w-full resize-none bg-transparent px-2.5 py-2 text-[14px] text-zinc-100 outline-none placeholder:text-zinc-500"
+   735→                  style={{ height: "auto" }}
+   736→                  onInput={(e) => {
+   737→                    const t = e.currentTarget;
+   738→                    t.style.height = "auto";
+   739→                    t.style.height = Math.min(t.scrollHeight, 160) + "px";
+   740→                  }}
+   741→                />
+   742→                <div className="flex items-center gap-1 px-1.5 pb-1.5 pt-0.5">
+   743→                  <ModelPicker
+   744→                    models={models}
+   745→                    value={model}
+   746→                    effort={effort}
+   747→                    onSelect={onModel}
+   748→                    onEffort={onEffort}
+   749→                    onCreateCustom={() => onOpenSettings("models")}
+   750→                    onEditCustom={() => onOpenSettings("models")}
+   751→                  />
+   752→
+   753→                  {/* effort quick picker */}
+   754→                  <Popover open={effortOpen} onOpenChange={setEffortOpen}>
+   755→                    <PopoverTrigger asChild>
+   756→                      <button className={cn(effortOpen ? toolBtnActive : toolBtn)} title="Reasoning effort" aria-label="Reasoning effort">
+   757→                        <SlidersHorizontal className="h-4 w-4" />
+   758→                      </button>
+   759→                    </PopoverTrigger>
+   760→                    <PopoverContent side="top" align="start" className="w-[300px] border-white/10 bg-[#0c101c] p-2 shadow-2xl shadow-black/60">
+   761→                      <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Reasoning effort</div>
+   762→                      <div className="grid grid-cols-3 gap-1">
+   763→                        {EFFORTS.map((e2) => (
+   764→                          <button
+   765→                            key={e2.id}
+   766→                            onClick={() => {
+   767→                              onEffort(e2.id);
+   768→                              setEffortOpen(false);
+   769→                            }}
+   770→                            title={e2.hint}
+   771→                            className={cn(
+   772→                              "flex flex-col items-center gap-1 rounded-lg border px-1 py-1.5 transition",
+   773→                              e2.id === effort
+   774→                                ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
+   775→                                : "border-transparent text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
+   776→                            )}
+   777→                          >
+   778→                            <EffortBars effort={e2} />
+   779→                            <span className="text-[11px] font-medium">{e2.label}</span>
+   780→                          </button>
+   781→                        ))}
+   782→                      </div>
+   783→                    </PopoverContent>
+   784→                  </Popover>
+   785→
+   786→                  {/* web access toggle */}
+   787→                  <button
+   788→                    onClick={() => setWebAccess((w) => !w)}
+   789→                    className={cn(webAccess ? toolBtnActive : toolBtn)}
+   790→                    title={webAccess ? "Web access: on — replies can cite links" : "Web access: off"}
+   791→                    aria-pressed={webAccess}
+   792→                  >
+   793→                    <Globe className="h-4 w-4" />
+   794→                  </button>
+   795→
+   796→                  {/* terminal toggle */}
+   797→                  <button
+   798→                    onClick={() => setTermOpen((t) => !t)}
+   799→                    className={cn(termOpen ? toolBtnActive : toolBtn)}
+   800→                    title="Terminal — run commands (Ctrl+`)"
+   801→                    aria-pressed={termOpen}
+   802→                  >
+   803→                    <SquareTerminal className="h-4 w-4" />
+   804→                  </button>
+   805→
+   806→                  {/* attach file */}
+   807→                  <input ref={fileRef} type="file" accept=".txt,.md,.markdown,.html,.htm,.css,.js,.ts,.jsx,.tsx,.json,.csv,.xml,.svg" className="hidden" onChange={onFile} />
+   808→                  <button onClick={() => fileRef.current?.click()} className={toolBtn} title="Attach a text file">
+   809→                    <Paperclip className="h-4 w-4" />
+   810→                  </button>
+   811→
+   812→                  {/* more menu */}
+   813→                  <DropdownMenu>
+   814→                    <DropdownMenuTrigger asChild>
+   815→                      <button className={toolBtn} title="More options">
+   816→                        <MoreHorizontal className="h-4 w-4" />
+   817→                      </button>
+   818→                    </DropdownMenuTrigger>
+   819→                    <DropdownMenuContent side="top" align="start" className="border-white/10 bg-[#0c101c] text-zinc-200">
+   820→                      <DropdownMenuItem onClick={onNewChat} className="gap-2 text-[12.5px]">
+   821→                        <MessageSquarePlus className="h-3.5 w-3.5" /> New chat
+   822→                      </DropdownMenuItem>
+   823→                      <DropdownMenuItem onClick={() => handleSlash("/export")} className="gap-2 text-[12.5px]">
+   824→                        <Download className="h-3.5 w-3.5" /> Export chat (.md)
+   825→                      </DropdownMenuItem>
+   826→                      <DropdownMenuItem onClick={() => onOpenSettings("github")} className="gap-2 text-[12.5px]">
+   827→                        <FolderGit2 className="h-3.5 w-3.5" /> Push to GitHub
+   828→                      </DropdownMenuItem>
+   829→                      <DropdownMenuItem onClick={onOpenAccount} className="gap-2 text-[12.5px]">
+   830→                        <CircleUserRound className="h-3.5 w-3.5" /> Account profile
+   831→                      </DropdownMenuItem>
+   832→                      <DropdownMenuItem onClick={() => onOpenSettings("appearance")} className="gap-2 text-[12.5px]">
+   833→                        <Settings className="h-3.5 w-3.5" /> Settings
+   834→                      </DropdownMenuItem>
+   835→                    </DropdownMenuContent>
+   836→                  </DropdownMenu>
+   837→
+   838→                  <div className="ml-auto flex items-center gap-1.5">
+   839→                    {busy ? (
+   840→                      <button
+   841→                        onClick={stop}
+   842→                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/20"
+   843→                        title="Stop generating"
+   844→                      >
+   845→                        <Square className="h-4 w-4" />
+   846→                      </button>
+   847→                    ) : input.trim() ? (
+   848→                      <button
+   849→                        onClick={() => send()}
+   850→                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500"
+   851→                        title="Send"
+   852→                      >
+   853→                        <ArrowUp className="h-4 w-4" />
+   854→                      </button>
+   855→                    ) : (
+   856→                      <button
+   857→                        onClick={startVoice}
+   858→                        className={cn(
+   859→                          "flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500",
+   860→                          listening && "animate-pulse bg-blue-500"
+   861→                        )}
+   862→                        title={listening ? "Listening... click to stop" : "Voice input"}
+   863→                      >
+   864→                        <Mic className="h-4 w-4" />
+   865→                      </button>
+   866→                    )}
+   867→                  </div>
+   868→                </div>
+   869→              </div>
+   870→              <div className="mt-1.5 text-center text-[10.5px] text-zinc-600">
+   871→                ChatUltra runs commands, builds games, previews HTML and pushes to GitHub · Model: <span className="text-zinc-400">{currentModel?.name}</span> · Effort: <span className="text-zinc-400">{eff.label}</span>
+   872→              </div>
+   873→            </div>
+   874→          </div>
+   875→
+   876→          {/* ---------- built-in terminal drawer ---------- */}
+   877→          <ChatTerminal shell={shell} open={termOpen} onClose={() => setTermOpen(false)} runToken={null} />
+   878→        </div>
+   879→
+   880→        {/* canvas / preview panel */}
+   881→        {preview && (
+   882→          <div className="hidden w-[46%] max-w-[720px] min-w-[380px] md:block">
+   883→            <PreviewPanel
+   884→              code={preview.code}
+   885→              onCodeChange={(c) => setPreview((p) => (p ? { ...p, code: c } : p))}
+   886→              title={preview.title}
+   887→              onClose={() => setPreview(null)}
+   888→            />
+   889→          </div>
+   890→        )}
+   891→      </div>
+   892→    </StudioContext.Provider>
+   893→  );
+   894→}
+   895→

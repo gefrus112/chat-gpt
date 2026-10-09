@@ -18,7 +18,8 @@ import { listCustomModels, createCustomModel, deleteCustomModel } from "@/lib/cu
 import { ghTestConnection } from "@/lib/gh-direct";
 import { callClaude, looksLikeAnthropicKey } from "@/lib/claude-direct";
 import { compressImage } from "@/lib/account";
-import { GitHubIcon } from "@/components/brand-icons";
+import { backendHealth, testSupabase } from "@/lib/cloud";
+import { GitHubIcon, StripeIcon, SupabaseIcon, CloudflareIcon } from "@/components/brand-icons";
 import { Loader2, Plus, Trash2, Upload, CheckCircle2, XCircle, Bot } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { asset } from "@/lib/asset";
@@ -57,6 +58,21 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
   const [clTesting, setClTesting] = useState(false);
   const [clResult, setClResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  // ChatUltra backend form
+  const [bkUrl, setBkUrl] = useState("");
+  const [bkKey, setBkKey] = useState("");
+  const [bkTesting, setBkTesting] = useState(false);
+  const [bkResult, setBkResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // Supabase form
+  const [sbUrl, setSbUrl] = useState("");
+  const [sbKey, setSbKey] = useState("");
+  const [sbTesting, setSbTesting] = useState(false);
+  const [sbResult, setSbResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // Cloudflare Turnstile
+  const [cfKey, setCfKey] = useState("");
+
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
@@ -81,6 +97,13 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
       setTestResult(null);
       setClKey(connections.anthropicKey);
       setClResult(null);
+      setBkUrl(connections.backendUrl);
+      setBkKey(connections.backendKey);
+      setBkResult(null);
+      setSbUrl(connections.supabaseUrl);
+      setSbKey(connections.supabaseAnonKey);
+      setSbResult(null);
+      setCfKey(connections.turnstileSiteKey);
     }
   }, [open, tab]);
 
@@ -139,6 +162,40 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
       }
     } finally {
       setClTesting(false);
+    }
+  };
+
+  const testBackend = async () => {
+    setConnections({ backendUrl: bkUrl.trim(), backendKey: bkKey.trim(), backendOk: false });
+    setBkTesting(true);
+    setBkResult(null);
+    try {
+      // let the health check read the just-saved values
+      await new Promise((r) => setTimeout(r, 50));
+      const h = await backendHealth();
+      if (h.ok) {
+        setConnections({ backendOk: true });
+        const live = [h.stripe ? "Stripe" : null, h.supabase ? "Supabase" : null].filter(Boolean).join(" + ");
+        setBkResult({ ok: true, msg: `Backend v${h.version} is live — free models: ${(h.freeModels ?? []).length}, providers: ${live || "free tier"}` });
+      } else {
+        setBkResult({ ok: false, msg: h.error ?? "backend not reachable" });
+      }
+    } finally {
+      setBkTesting(false);
+    }
+  };
+
+  const testSupabaseConn = async () => {
+    setConnections({ supabaseUrl: sbUrl.trim(), supabaseAnonKey: sbKey.trim(), supabaseOk: false });
+    setSbTesting(true);
+    setSbResult(null);
+    try {
+      await new Promise((r) => setTimeout(r, 50));
+      const r = await testSupabase();
+      setConnections({ supabaseOk: r.ok });
+      setSbResult(r);
+    } finally {
+      setSbTesting(false);
     }
   };
 
@@ -290,9 +347,85 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
               </div>
               {connections.anthropicOk && (
                 <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2 text-[12px] text-emerald-200">
-                  Claude connected — pick <span className="font-mono">Claude Opus 5</span> in the model picker and chat for real.
+                  Claude connected — pick <span className="font-mono">Claude Opus 5.1</span> or <span className="font-mono">Claude Opus 5</span> in the model picker and chat for real.
                 </div>
               )}
+
+              {/* ---- ChatUltra backend ---- */}
+              <div className="border-t border-white/[0.07] pt-4">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md border border-cyan-400/25 bg-cyan-950/50 font-mono text-[11px] font-bold text-cyan-300">CU</span>
+                  <Label className="text-[12.5px] font-semibold text-zinc-200">ChatUltra Backend</Label>
+                  {connections.backendOk && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300">Live</span>}
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                  Run the <span className="font-mono text-zinc-400">backend/</span> folder (<span className="font-mono text-zinc-400">npm start</span>) for real text + video generation with API keys, Stripe credits and Supabase accounts. Public models stay free.
+                </p>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Input placeholder="http://localhost:8787" value={bkUrl} onChange={(e) => setBkUrl(e.target.value)} className="border-white/10 bg-white/[0.04] font-mono text-[12px]" />
+                  <Input type="password" placeholder="Backend key (CHATULTRA_BACKEND_KEY)" value={bkKey} onChange={(e) => setBkKey(e.target.value)} className="border-white/10 bg-white/[0.04] font-mono text-[12px]" />
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button onClick={testBackend} disabled={bkTesting || !bkUrl.trim()} className="h-8 gap-1.5 bg-cyan-500/15 text-[12px] text-cyan-200 hover:bg-cyan-500/25">
+                    {bkTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Test backend
+                  </Button>
+                  {bkResult && (
+                    <span className={cn("flex items-center gap-1 text-[11.5px]", bkResult.ok ? "text-emerald-300" : "text-rose-300")}>
+                      {bkResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                      {bkResult.msg}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* ---- Supabase ---- */}
+              <div className="border-t border-white/[0.07] pt-4">
+                <div className="flex items-center gap-2">
+                  <SupabaseIcon className="h-4 w-4 text-emerald-400" />
+                  <Label className="text-[12.5px] font-semibold text-zinc-200">Supabase — account cloud sync</Label>
+                  {connections.supabaseOk && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300">Connected</span>}
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                  Store account profiles (avatar, bio, website) in your own Supabase project. Table schema: <span className="font-mono text-zinc-400">backend/supabase/schema.sql</span>.
+                </p>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Input placeholder="https://xxxx.supabase.co" value={sbUrl} onChange={(e) => setSbUrl(e.target.value)} className="border-white/10 bg-white/[0.04] font-mono text-[12px]" />
+                  <Input type="password" placeholder="Anon public key (eyJhbGci...)" value={sbKey} onChange={(e) => setSbKey(e.target.value)} className="border-white/10 bg-white/[0.04] font-mono text-[12px]" />
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button onClick={testSupabaseConn} disabled={sbTesting || !sbUrl.trim() || !sbKey.trim()} className="h-8 gap-1.5 bg-emerald-500/15 text-[12px] text-emerald-200 hover:bg-emerald-500/25">
+                    {sbTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Test connection
+                  </Button>
+                  {sbResult && (
+                    <span className={cn("flex items-center gap-1 text-[11.5px]", sbResult.ok ? "text-emerald-300" : "text-rose-300")}>
+                      {sbResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                      {sbResult.msg}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* ---- Cloudflare Turnstile ---- */}
+              <div className="border-t border-white/[0.07] pt-4">
+                <div className="flex items-center gap-2">
+                  <CloudflareIcon className="h-4 w-4 text-orange-400" />
+                  <Label className="text-[12.5px] font-semibold text-zinc-200">Cloudflare Turnstile — signup protection</Label>
+                  {connections.turnstileSiteKey && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300">Armed</span>}
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                  Add a Turnstile widget to your Cloudflare account and paste its site key — the signup form renders the human-check and the backend verifies the token.
+                </p>
+                <Input
+                  placeholder="0x4AAAAAAA..."
+                  value={cfKey}
+                  onChange={(e) => {
+                    setCfKey(e.target.value);
+                    setConnections({ turnstileSiteKey: e.target.value.trim() });
+                  }}
+                  className="mt-2 border-white/10 bg-white/[0.04] font-mono text-[12px]"
+                />
+              </div>
+
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-[11.5px] leading-relaxed text-zinc-500">
                 <span className="text-zinc-300">How it works:</span> on the static GitHub Pages site, ChatUltra calls the Anthropic Messages API directly from your browser with the direct-browser-access header. Without a key (or if the request is blocked), the built-in demo engine takes over so the app never breaks.
               </div>
@@ -463,15 +596,17 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
             <div className="flex flex-col items-center py-4 text-center">
               <Image src={asset("/logo.png")} alt="ChatUltra" width={72} height={72} className="rounded-2xl border border-white/10" unoptimized />
               <h3 className="mt-3 text-lg font-semibold text-white">ChatUltra</h3>
-              <p className="mt-1 text-[12px] text-zinc-500">v1.4.0 · Codex-grade AI workspace</p>
+              <p className="mt-1 text-[12px] text-zinc-500">v2.0.0 · Codex-grade AI workspace</p>
               <div className="mt-4 grid w-full max-w-sm grid-cols-2 gap-2 text-left text-[12px]">
                 {[
-                  ["Models", "9 built-in + your customs"],
+                  ["Models", "13 built-in + your customs"],
+                  ["Video AI", "Dreamina · Seedance · Kling Omni"],
+                  ["Credits", "Stripe checkout + free tier"],
+                  ["Accounts", "Supabase sync · Turnstile"],
+                  ["Backend", "backend/ folder — API keys"],
                   ["Effort levels", "Low to Ultra (6)"],
                   ["Playground", "Game builder + popout editor"],
                   ["Terminal", "chatultra-shell (Linux-style)"],
-                  ["Canvas", "HTML live preview + Run"],
-                  ["GitHub", "token push · gefrus112/chat-gpt"],
                 ].map(([k, v]) => (
                   <div key={k} className="rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-500">{k}</div>

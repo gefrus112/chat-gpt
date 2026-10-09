@@ -20,13 +20,16 @@ git -C "$TMP" add -A
 git -C "$TMP" -c user.email=deploy@chatultra.local -c user.name=ChatUltra commit -qm "site"
 
 TREE=$(git -C "$TMP" rev-parse HEAD^{tree})
-PARENT=$(git rev-parse gh-pages^{commit} 2>/dev/null || true)
+PARENT=$(git rev-parse --verify --quiet gh-pages^{commit} 2>/dev/null || true)
 if [ -n "$PARENT" ]; then
-  COMMIT=$(git commit-tree "$TREE" -p "$PARENT" -m "$DEPLOY_MSG")
+  COMMIT=$(git -C "$TMP" commit-tree "$TREE" -p "$PARENT" -m "$DEPLOY_MSG")
 else
-  COMMIT=$(git commit-tree "$TREE" -m "$DEPLOY_MSG")
+  COMMIT=$(git -C "$TMP" commit-tree "$TREE" -m "$DEPLOY_MSG")
 fi
-git update-ref refs/heads/gh-pages "$COMMIT"
+# the commit/tree objects live in the temp repo — transfer them over
+git -C "$TMP" update-ref refs/heads/deploy "$COMMIT"
+git fetch -q "$TMP" deploy
+git update-ref refs/heads/gh-pages FETCH_HEAD
 
 echo "gh-pages rebuilt: $(git log --oneline -1 gh-pages)"
 echo "files: $(git ls-tree -r --name-only gh-pages | wc -l)"
