@@ -82,7 +82,6 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
       setClKey(connections.anthropicKey);
       setClResult(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tab]);
 
   const testConnection = async () => {

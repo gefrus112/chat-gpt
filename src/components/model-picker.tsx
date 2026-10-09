@@ -1,10 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { ChevronsUpDown, Plus, Sparkles, Check } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronsUpDown, Plus, Sparkles, Check, Search, ExternalLink, Pencil } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BUILT_IN_MODELS, EFFORTS, PROVIDER_LABEL, type EffortDef, type ModelDef } from "@/lib/models";
+import { BUILT_IN_MODELS, EFFORTS, PROVIDER_LABEL, PROVIDER_URL, type EffortDef, type ModelDef } from "@/lib/models";
 import { ClaudeIcon, GeminiIcon, LunaIcon, OpenAIIcon } from "@/components/brand-icons";
 import { listCustomModels } from "@/lib/custom-models-client";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,15 @@ export function ModelIcon({ model, className, size = 28 }: { model: ModelDef; cl
           <LunaIcon style={inner} />
         </span>
       );
+    case "local":
+      return (
+        <span
+          className={cn(cls, "flex items-center justify-center rounded-lg border font-bold", model.tile ?? "bg-white/[0.06] text-zinc-300 border-white/10")}
+          style={s}
+        >
+          <span style={{ fontSize: size * 0.42 }}>{model.name.slice(0, 1)}</span>
+        </span>
+      );
     default:
       return (
         <span className={cn(cls, "flex items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-950/40 text-cyan-300 font-bold")} style={s}>
@@ -81,23 +90,36 @@ interface ModelPickerProps {
   onSelect: (id: string) => void;
   onEffort: (id: EffortDef["id"]) => void;
   onCreateCustom: () => void;
+  onEditCustom?: () => void;
 }
 
-export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreateCustom }: ModelPickerProps) {
+export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreateCustom, onEditCustom }: ModelPickerProps) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const current = models.find((m) => m.id === value) ?? models[0];
   const eff = EFFORTS.find((e) => e.id === effort) ?? EFFORTS[2];
 
   // group models by provider preserving order
-  const groups: { provider: string; models: ModelDef[] }[] = [];
-  for (const m of models) {
-    const g = groups.find((x) => x.provider === m.provider);
-    if (g) g.models.push(m);
-    else groups.push({ provider: m.provider, models: [m] });
-  }
+  const groups = useMemo(() => {
+    const gs: { provider: string; models: ModelDef[] }[] = [];
+    const q = query.trim().toLowerCase();
+    for (const m of models) {
+      if (q && !(`${m.name} ${m.tagline} ${m.provider}`.toLowerCase().includes(q))) continue;
+      const g = gs.find((x) => x.provider === m.provider);
+      if (g) g.models.push(m);
+      else gs.push({ provider: m.provider, models: [m] });
+    }
+    return gs;
+  }, [models, query]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setTimeout(() => setQuery(""), 150);
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -110,7 +132,7 @@ export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreat
           <span className="min-w-0">
             <span className="block truncate text-[12.5px] font-medium text-zinc-100">{current?.name}</span>
           </span>
-          <span className="flex items-center gap-1.5 rounded-md bg-white/[0.05] px-1.5 py-0.5 text-[11px] text-zinc-300">
+          <span className="hidden items-center gap-1.5 rounded-md bg-white/[0.05] px-1.5 py-0.5 text-[11px] text-zinc-300 sm:flex">
             <EffortBars effort={eff} />
             {eff.label}
           </span>
@@ -118,7 +140,22 @@ export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreat
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" className="w-[380px] border-white/10 bg-[#0c101c] p-0 shadow-2xl shadow-black/60">
-        <div className="max-h-[380px] overflow-y-auto p-1.5 chatultra-scroll">
+        {/* search models */}
+        <div className="border-b border-white/[0.07] p-2">
+          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5">
+            <Search className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search models..."
+              className="w-full bg-transparent text-[13px] text-zinc-100 outline-none placeholder:text-zinc-500"
+            />
+          </div>
+        </div>
+
+        <div className="max-h-[340px] overflow-y-auto p-1.5 chatultra-scroll">
+          {groups.length === 0 && <div className="px-3 py-6 text-center text-[12.5px] text-zinc-500">No models match &quot;{query}&quot;</div>}
           {groups.map((g) => (
             <div key={g.provider} className="mb-1">
               <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
@@ -132,7 +169,7 @@ export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreat
                     setOpen(false);
                   }}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition",
+                    "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition",
                     m.id === value ? "bg-cyan-400/10" : "hover:bg-white/[0.06]"
                   )}
                 >
@@ -148,7 +185,38 @@ export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreat
                     </span>
                     <span className="block truncate text-[11px] text-zinc-500">{m.tagline}</span>
                   </span>
-                  {m.id === value && <Check className="h-3.5 w-3.5 shrink-0 text-cyan-300" />}
+                  {/* hover actions — provider link / edit custom model */}
+                  <span className="hidden shrink-0 items-center gap-1 group-hover:flex">
+                    {m.provider === "custom" ? (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        title="More Options — edit your model"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpen(false);
+                          onEditCustom?.();
+                        }}
+                        onKeyDown={(e) => e.key === "Enter" && (e.stopPropagation(), setOpen(false), onEditCustom?.())}
+                        className="rounded-md p-1 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </span>
+                    ) : null}
+                    {PROVIDER_URL[m.provider as keyof typeof PROVIDER_URL] && (
+                      <a
+                        href={PROVIDER_URL[m.provider as keyof typeof PROVIDER_URL]}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Provider options"
+                        onClick={(e) => e.stopPropagation()}
+                        className="rounded-md p-1 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </span>
+                  {m.id === value && <Check className="h-3.5 w-3.5 shrink-0 text-cyan-300 group-hover:hidden" />}
                 </button>
               ))}
             </div>
@@ -158,15 +226,12 @@ export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreat
               setOpen(false);
               onCreateCustom();
             }}
-            className="mt-1 flex w-full items-center gap-2.5 rounded-lg border border-dashed border-white/15 px-2.5 py-2.5 text-left text-[13px] text-zinc-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
+            className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13px] text-zinc-300 transition hover:bg-white/[0.06] hover:text-cyan-200"
           >
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.05]">
               <Plus className="h-3.5 w-3.5" />
             </span>
-            <span>
-              Create your own model
-              <span className="block text-[11px] text-zinc-500">Upload an avatar, give it a prompt & personality</span>
-            </span>
+            <span>Add New Models Provider...</span>
           </button>
         </div>
         <div className="border-t border-white/10 p-2">

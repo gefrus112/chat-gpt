@@ -1,18 +1,50 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { ArrowUp, Loader2, Square, Wrench, Gamepad2, Globe, Brain, Joystick } from "lucide-react";
+import {
+  ArrowUp,
+  Loader2,
+  Square,
+  Gamepad2,
+  Globe,
+  Brain,
+  Joystick,
+  SlidersHorizontal,
+  SquareTerminal,
+  Paperclip,
+  MoreHorizontal,
+  Mic,
+  MessageSquarePlus,
+  Download,
+  FolderGit2,
+  CircleUserRound,
+  Settings,
+  TerminalSquare,
+} from "lucide-react";
 import { Markdown, StudioContext } from "@/components/markdown";
-import { ModelPicker, ModelIcon } from "@/components/model-picker";
+import { ModelPicker, EffortBars } from "@/components/model-picker";
 import { PreviewPanel } from "@/components/preview-panel";
+import { ChatTerminal } from "@/components/chat-terminal";
+import { ChatShell, resultToText } from "@/lib/shell";
 import type { SettingsTab } from "@/components/settings-dialog";
-import { findEffort, type EffortDef, type ModelDef } from "@/lib/models";
+import { findEffort, EFFORTS, PROVIDER_LABEL, type EffortDef, type ModelDef } from "@/lib/models";
 import { demoReply, streamDemoReply } from "@/lib/demo-ai";
 import { callClaude } from "@/lib/claude-direct";
-import { useSettings } from "@/lib/store";
+import { useSettings, ACCENTS } from "@/lib/store";
 import { asset } from "@/lib/asset";
 import { toast } from "@/hooks/use-toast";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export interface ChatMessage {
@@ -22,6 +54,11 @@ export interface ChatMessage {
   model?: string;
   effort?: string;
   streaming?: boolean;
+  /** command execution card (slash commands / shell runs) */
+  kind?: "command";
+  cmd?: string;
+  output?: string;
+  ok?: boolean;
 }
 
 interface ChatViewProps {
@@ -29,10 +66,13 @@ interface ChatViewProps {
   model: string;
   effort: string;
   conversationId: string | null;
+  terminalSignal: number;
   onModel: (id: string) => void;
   onEffort: (id: EffortDef["id"]) => void;
   onConversationCreated: (id: string) => void;
   onOpenSettings: (tab?: SettingsTab) => void;
+  onOpenAccount: () => void;
+  onNewChat: () => void;
 }
 
 const SUGGESTIONS: { icon: React.ReactNode; title: string; prompt: string }[] = [
@@ -42,19 +82,78 @@ const SUGGESTIONS: { icon: React.ReactNode; title: string; prompt: string }[] = 
   { icon: <Joystick className="h-4 w-4 text-rose-300" />, title: "Remix a classic", prompt: "Build a complete single-file HTML snake game with neon glow, wrap-around walls, increasing speed and a high-score counter." },
 ];
 
-export function ChatView({ models, model, effort, conversationId, onModel, onEffort, onConversationCreated, onOpenSettings }: ChatViewProps) {
+const SLASH_COMMANDS: { name: string; desc: string }[] = [
+  { name: "/help", desc: "Show all slash commands" },
+  { name: "/models", desc: "List every loaded AI model" },
+  { name: "/model <name>", desc: "Switch model — /model opus" },
+  { name: "/effort <level>", desc: "low medium high extra max ultra" },
+  { name: "/run <cmd>", desc: "Run a shell command — /run neofetch" },
+  { name: "/terminal", desc: "Open the built-in terminal" },
+  { name: "/ls", desc: "List project files" },
+  { name: "/cat <file>", desc: "Print a project file" },
+  { name: "/npm <args>", desc: "npm install, npm run dev..." },
+  { name: "/git <sub>", desc: "git status, git log, git push" },
+  { name: "/web", desc: "Toggle web access for replies" },
+  { name: "/game <desc>", desc: "Build a playable game from a description" },
+  { name: "/export", desc: "Download this chat as Markdown" },
+  { name: "/push", desc: "Open GitHub push settings" },
+  { name: "/account", desc: "Open your account profile" },
+  { name: "/settings", desc: "Open settings" },
+  { name: "/theme <accent>", desc: "cyan violet emerald amber rose sky" },
+  { name: "/clear", desc: "Start a fresh chat" },
+];
+
+const ARGLESS = new Set(["/help", "/models", "/terminal", "/ls", "/web", "/export", "/push", "/account", "/settings", "/clear"]);
+
+export function ChatView({ models, model, effort, conversationId, terminalSignal, onModel, onEffort, onConversationCreated, onOpenSettings, onOpenAccount, onNewChat }: ChatViewProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<{ code: string; title: string } | null>(null);
+  const [termOpen, setTermOpen] = useState(false);
+  const [webAccess, setWebAccess] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [effortOpen, setEffortOpen] = useState(false);
+  const [slashSel, setSlashSel] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const convRef = useRef<string | null>(conversationId);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const recRef = useRef<{ stop: () => void } | null>(null);
+
+  const shellRef = useRef<ChatShell | null>(null);
+  if (!shellRef.current) shellRef.current = new ChatShell();
+  const shell = shellRef.current;
+
+  const gh = useSettings((s) => s.gh);
+  const setAppearance = useSettings((s) => s.setAppearance);
+  const appearance = useSettings((s) => s.appearance);
 
   useEffect(() => {
     convRef.current = conversationId;
   }, [conversationId]);
+
+  useEffect(() => {
+    shell.setModelsProvider(() => models.map((m) => `${m.name} (${PROVIDER_LABEL[m.provider] ?? m.provider})`));
+  }, [models, shell]);
+
+  // rail / sidebar terminal button opens the drawer
+  useEffect(() => {
+    if (terminalSignal > 0) setTermOpen(true);
+  }, [terminalSignal]);
+
+  // Ctrl+` toggles the terminal drawer
+  useEffect(() => {
+    const onWin = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === "`") {
+        e.preventDefault();
+        setTermOpen((t) => !t);
+      }
+    };
+    window.addEventListener("keydown", onWin);
+    return () => window.removeEventListener("keydown", onWin);
+  }, []);
 
   const currentModel = models.find((m) => m.id === model) ?? models[0];
   const eff = findEffort(effort);
@@ -62,6 +161,11 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
   const openPreview = useCallback((code: string, title?: string) => {
     setPreview({ code, title: title ?? "Canvas" });
   }, []);
+
+  const runCommand = useCallback(
+    async (cmd: string): Promise<string> => resultToText(await shell.run(cmd)),
+    [shell]
+  );
 
   // load conversation when switching
   useEffect(() => {
@@ -95,10 +199,156 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  /* ---------------- slash commands ---------------- */
+
+  const appendCommand = (cmd: string, output: string, ok = true) => {
+    setMessages((m) => [...m, { id: `c-${Date.now()}`, role: "user", kind: "command", cmd, output, ok, content: "" }]);
+  };
+
+  const handleSlash = async (raw: string) => {
+    const text = raw.trim();
+    const [name, ...rest] = text.split(/\s+/);
+    const arg = rest.join(" ").trim();
+
+    switch (name) {
+      case "/help":
+        appendCommand(
+          name,
+          "ChatUltra commands:\n" + SLASH_COMMANDS.map((c) => `  ${c.name.padEnd(18)} ${c.desc}`).join("\n") +
+            "\n\nShell commands (use /run or the terminal): ls cd cat echo touch mkdir rm run build git npm node python ps df uname neofetch whoami date history"
+        );
+        return;
+      case "/models":
+        appendCommand(name, "loaded models:\n" + models.map((m) => `  - ${m.name} (${PROVIDER_LABEL[m.provider] ?? m.provider})${m.id === model ? "  [active]" : ""}`).join("\n"));
+        return;
+      case "/model": {
+        const q = arg.toLowerCase();
+        const hit = models.find((m) => m.id === arg || m.name.toLowerCase() === q) ?? models.find((m) => m.name.toLowerCase().includes(q) && q.length > 0);
+        if (!hit) {
+          appendCommand(text, `model not found: "${arg}"\navailable:\n` + models.map((m) => `  - ${m.name}`).join("\n"), false);
+          return;
+        }
+        onModel(hit.id);
+        appendCommand(text, `[ok] switched to ${hit.name}`);
+        return;
+      }
+      case "/effort": {
+        const e = EFFORTS.find((x) => x.id === arg.toLowerCase());
+        if (!e) {
+          appendCommand(text, `unknown effort "${arg}" — levels: ${EFFORTS.map((x) => x.id).join(", ")}`, false);
+          return;
+        }
+        onEffort(e.id);
+        appendCommand(text, `[ok] reasoning effort set to ${e.label}`);
+        return;
+      }
+      case "/run":
+        if (!arg) {
+          appendCommand(name, "usage: /run <command> — try /run neofetch", false);
+          return;
+        }
+        appendCommand(arg, resultToText(await shell.run(arg)));
+        return;
+      case "/ls":
+        appendCommand(name, resultToText(await shell.run("ls")));
+        return;
+      case "/cat":
+        if (!arg) {
+          appendCommand(name, "usage: /cat <file> — try /cat README.md", false);
+          return;
+        }
+        appendCommand(`${name} ${arg}`, resultToText(await shell.run(`cat ${arg}`)));
+        return;
+      case "/npm":
+        appendCommand(text, resultToText(await shell.run(`npm ${arg || "--help"}`.trim())));
+        return;
+      case "/git":
+        if (!arg) {
+          appendCommand(name, "usage: /git <status|log|push>", false);
+          return;
+        }
+        appendCommand(text, resultToText(await shell.run(`git ${arg}`)));
+        return;
+      case "/terminal":
+        setTermOpen(true);
+        appendCommand(name, "[ok] terminal opened — type `help` inside");
+        return;
+      case "/web":
+        setWebAccess((w) => {
+          appendCommand(name, `[ok] web access ${!w ? "enabled" : "disabled"}`);
+          return !w;
+        });
+        return;
+      case "/game":
+        appendCommand(name, arg ? `[ok] building game: ${arg}` : "usage: /game <description> — try /game neon pong", Boolean(arg));
+        if (arg) send(`Build a complete playable single-file HTML game: ${arg}. Full HTML in one code block.`);
+        return;
+      case "/export": {
+        const md =
+          "# ChatUltra chat export\n\n" +
+          messages
+            .map((m) =>
+              m.kind === "command"
+                ? `\`\`\`console\n$ ${m.cmd}\n${m.output ?? ""}\n\`\`\``
+                : `**${m.role === "user" ? "You" : m.model || "ChatUltra"}**\n\n${m.content}`
+            )
+            .join("\n\n---\n\n");
+        try {
+          const blob = new Blob([md], { type: "text/markdown" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "chatultra-chat.md";
+          a.click();
+          URL.revokeObjectURL(a.href);
+          appendCommand(name, "[ok] exported chatultra-chat.md");
+        } catch {
+          appendCommand(name, "[err] export failed in this browser", false);
+        }
+        return;
+      }
+      case "/push":
+        onOpenSettings("github");
+        appendCommand(name, "[ok] opening GitHub settings — token + repo are prefilled");
+        return;
+      case "/account":
+        onOpenAccount();
+        appendCommand(name, "[ok] opening account profile");
+        return;
+      case "/settings":
+        onOpenSettings("appearance");
+        appendCommand(name, "[ok] opening settings");
+        return;
+      case "/theme": {
+        const a = ACCENTS.find((x) => x.id === arg.toLowerCase());
+        if (!a) {
+          appendCommand(text, `unknown accent "${arg}" — options: ${ACCENTS.map((x) => x.id).join(", ")}`, false);
+          return;
+        }
+        setAppearance({ accent: a.hex });
+        appendCommand(text, `[ok] accent set to ${a.label} (${a.hex})`);
+        return;
+      }
+      case "/clear":
+        onNewChat();
+        return;
+      default:
+        appendCommand(name, `unknown command: ${name} — type /help`, false);
+    }
+  };
+
+  /* ---------------- send ---------------- */
+
   const send = async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || busy) return;
+    if (msg.startsWith("/")) {
+      setInput("");
+      if (taRef.current) taRef.current.style.height = "auto";
+      await handleSlash(msg);
+      return;
+    }
     setInput("");
+    if (taRef.current) taRef.current.style.height = "auto";
     setBusy(true);
 
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content: msg };
@@ -217,7 +467,110 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
 
   const stop = () => abortRef.current?.abort();
 
+  /* ---------------- voice input ---------------- */
+
+  const startVoice = () => {
+    type Rec = { start: () => void; stop: () => void; onresult: ((e: { results: { 0: { 0: { transcript: string } } } }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; continuous: boolean; interimResults: boolean; lang: string };
+    const w = window as unknown as { SpeechRecognition?: new () => Rec; webkitSpeechRecognition?: new () => Rec };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Ctor) {
+      toast({ title: "Voice input unavailable", description: "This browser does not support speech recognition — try Chrome or Edge." });
+      return;
+    }
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = new Ctor();
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.lang = "en-US";
+    rec.onresult = (e) => {
+      const t = e.results?.[0]?.[0]?.transcript ?? "";
+      if (t) setInput((prev) => (prev ? prev + " " : "") + t);
+    };
+    rec.onend = () => {
+      setListening(false);
+      recRef.current = null;
+    };
+    rec.onerror = () => {
+      setListening(false);
+      recRef.current = null;
+    };
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
+
+  /* ---------------- attach ---------------- */
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > 80 * 1024) {
+      toast({ title: "File too large", description: "Attach text files under 80 kB." });
+      return;
+    }
+    const text = await f.text();
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "txt";
+    const lang = ["html", "css", "js", "ts", "json", "md", "csv", "xml", "svg"].includes(ext) ? ext : "text";
+    setInput((prev) => `${prev}${prev ? "\n" : ""}[Attached file: ${f.name}]\n\`\`\`${lang}\n${text}\n\`\`\``);
+    taRef.current?.focus();
+  };
+
+  /* ---------------- slash autocomplete ---------------- */
+
+  const slashQuery = useMemo(() => {
+    const m = /^\/[a-z]*$/i.exec(input.trim());
+    return m ? m[0].toLowerCase() : null;
+  }, [input]);
+  const slashFiltered = useMemo(
+    () => (slashQuery === null ? [] : SLASH_COMMANDS.filter((c) => c.name.startsWith(slashQuery))),
+    [slashQuery]
+  );
+  const slashOpen = slashFiltered.length > 0;
+
+  useEffect(() => setSlashSel(0), [slashQuery]);
+
+  const execFromMenu = (name: string) => {
+    if (ARGLESS.has(name)) {
+      handleSlash(name);
+      setInput("");
+      return;
+    }
+    setInput(name.split(" ")[0] + " ");
+    taRef.current?.focus();
+  };
+
   const onTaKey = (e: React.KeyboardEvent) => {
+    if (slashOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashSel((s) => (s + 1) % slashFiltered.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashSel((s) => (s - 1 + slashFiltered.length) % slashFiltered.length);
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        execFromMenu(slashFiltered[slashSel].name);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        execFromMenu(slashFiltered[slashSel].name);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setInput("");
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -225,9 +578,11 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
   };
 
   const fontCls = eff.id === "ultra" ? "text-zinc-300" : "";
+  const toolBtn = "flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/[0.07] hover:text-zinc-100";
+  const toolBtnActive = "flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-400/15 text-cyan-300 transition hover:bg-cyan-400/25";
 
   return (
-    <StudioContext.Provider value={{ openPreview }}>
+    <StudioContext.Provider value={{ openPreview, runCommand, openTerminal: () => setTermOpen(true) }}>
       <div className="flex h-full min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {messages.length === 0 ? (
@@ -248,7 +603,7 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
                 ChatUltra
               </h1>
               <p className="mt-2 text-[13.5px] text-zinc-400">
-                Chat · Build games · Ship to GitHub — your Codex-grade AI workspace
+                Chat · Build games · Run commands · Ship to GitHub — your Codex-grade AI workspace
               </p>
               <div className="mt-8 grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {SUGGESTIONS.map((s) => (
@@ -267,47 +622,77 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
                   </button>
                 ))}
               </div>
+              <div className="mt-5 flex items-center gap-2 text-[11.5px] text-zinc-600">
+                <TerminalSquare className="h-3.5 w-3.5" />
+                Type <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/</code> for commands — try <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/run neofetch</code>
+              </div>
             </div>
           ) : (
             /* ---------- messages ---------- */
             <div ref={scrollRef} className="chatultra-scroll min-h-0 flex-1 overflow-y-auto px-4 py-6">
               <div className="mx-auto flex max-w-3xl flex-col gap-6">
-                {messages.map((m) => (
-                  <div key={m.id} className={cn("flex gap-3", m.role === "user" && "justify-end")}>
-                    {m.role === "assistant" && (
-                      <Image src={asset("/logo.png")} alt="ChatUltra" width={30} height={30} className="mt-0.5 h-[30px] w-[30px] rounded-xl border border-white/10" unoptimized />
-                    )}
-                    <div className={cn("min-w-0", m.role === "user" ? "max-w-[85%]" : "max-w-full flex-1")}>
-                      {m.role === "user" ? (
-                        <div className="rounded-2xl rounded-tr-md border border-cyan-400/20 bg-cyan-400/[0.08] px-4 py-2.5 text-[14px] leading-relaxed text-zinc-100 whitespace-pre-wrap">
-                          {m.content}
+                {messages.map((m) =>
+                  m.kind === "command" ? (
+                    /* ---------- command execution card ---------- */
+                    <div key={m.id} className="overflow-hidden rounded-xl border border-white/10 bg-[#05070d] font-mono">
+                      <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-1.5">
+                        <SquareTerminal className="h-3 w-3 text-emerald-400" />
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-500">chatultra-shell</span>
+                        <span className={cn("ml-auto text-[10px]", m.ok ? "text-emerald-500" : "text-rose-500")}>{m.ok ? "exit 0" : "exit 1"}</span>
+                      </div>
+                      <div className="px-3 py-2.5">
+                        <div className="flex gap-2">
+                          <span className="shrink-0 text-emerald-400">$</span>
+                          <span className="min-w-0 break-all text-zinc-100">{m.cmd}</span>
                         </div>
-                      ) : (
-                        <div className="rounded-2xl rounded-tl-md border border-white/[0.07] bg-white/[0.02] px-4 py-2">
-                          {m.content ? (
-                            <Markdown content={m.content} className={fontCls} />
-                          ) : (
-                            <div className="flex items-center gap-2 py-1 text-[13px] text-zinc-400">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-300" />
-                              <span className="font-mono text-[12px]">{currentModel?.name} is thinking ({eff.label} effort)…</span>
-                            </div>
-                          )}
-                          {!m.streaming && m.content && (
-                            <div className="mt-1.5 flex items-center gap-2 border-t border-white/5 pt-1.5 text-[10.5px] text-zinc-600">
-                              {m.model && <span className="font-mono">{m.model}</span>}
-                              {m.effort && <span>· effort {m.effort}</span>}
-                            </div>
-                          )}
+                        {m.output ? (
+                          <pre className="chatultra-scroll mt-2 max-h-[280px] overflow-auto whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-zinc-300">
+                            {m.output}
+                          </pre>
+                        ) : (
+                          <div className="mt-2 flex items-center gap-2 text-[11.5px] text-zinc-500">
+                            <Loader2 className="h-3 w-3 animate-spin" /> running…
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={m.id} className={cn("flex gap-3", m.role === "user" && "justify-end")}>
+                      {m.role === "assistant" && (
+                        <Image src={asset("/logo.png")} alt="ChatUltra" width={30} height={30} className="mt-0.5 h-[30px] w-[30px] rounded-xl border border-white/10" unoptimized />
+                      )}
+                      <div className={cn("min-w-0", m.role === "user" ? "max-w-[85%]" : "max-w-full flex-1")}>
+                        {m.role === "user" ? (
+                          <div className="rounded-2xl rounded-tr-md border border-cyan-400/20 bg-cyan-400/[0.08] px-4 py-2.5 text-[14px] leading-relaxed text-zinc-100 whitespace-pre-wrap">
+                            {m.content}
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl rounded-tl-md border border-white/[0.07] bg-white/[0.02] px-4 py-2">
+                            {m.content ? (
+                              <Markdown content={m.content} className={fontCls} />
+                            ) : (
+                              <div className="flex items-center gap-2 py-1 text-[13px] text-zinc-400">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-300" />
+                                <span className="font-mono text-[12px]">{currentModel?.name} is thinking ({eff.label} effort)…</span>
+                              </div>
+                            )}
+                            {!m.streaming && m.content && (
+                              <div className="mt-1.5 flex items-center gap-2 border-t border-white/5 pt-1.5 text-[10.5px] text-zinc-600">
+                                {m.model && <span className="font-mono">{m.model}</span>}
+                                {m.effort && <span>· effort {m.effort}</span>}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {m.role === "user" && (
+                        <div className="mt-0.5 flex h-[30px] w-[30px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-[11px] font-semibold text-zinc-300">
+                          You
                         </div>
                       )}
                     </div>
-                    {m.role === "user" && (
-                      <div className="mt-0.5 flex h-[30px] w-[30px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-[11px] font-semibold text-zinc-300">
-                        You
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             </div>
           )}
@@ -315,14 +700,37 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
           {/* ---------- composer ---------- */}
           <div className="shrink-0 px-4 pb-4">
             <div className="mx-auto max-w-3xl">
-              <div className="rounded-2xl border border-white/10 bg-[#0c101c] p-2 shadow-xl shadow-black/40 transition focus-within:border-cyan-400/30">
+              <div className="relative rounded-2xl border border-white/10 bg-[#0c101c] shadow-xl shadow-black/40 transition focus-within:border-cyan-400/30">
+                {/* slash command popup */}
+                {slashOpen && (
+                  <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-white/10 bg-[#0c101c] shadow-2xl shadow-black/60">
+                    <div className="chatultra-scroll max-h-[264px] overflow-y-auto p-1.5">
+                      {slashFiltered.map((c, i) => (
+                        <button
+                          key={c.name}
+                          onMouseEnter={() => setSlashSel(i)}
+                          onClick={() => execFromMenu(c.name)}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition",
+                            i === slashSel ? "bg-cyan-400/10" : "hover:bg-white/[0.05]"
+                          )}
+                        >
+                          <span className="w-32 shrink-0 font-mono text-[12.5px] font-medium text-cyan-300">{c.name}</span>
+                          <span className="truncate text-[12px] text-zinc-400">{c.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="border-t border-white/[0.07] px-3 py-1.5 text-[10px] text-zinc-600">Tab to complete · Enter to run · Esc to dismiss</div>
+                  </div>
+                )}
+
                 <textarea
                   ref={taRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={onTaKey}
                   rows={1}
-                  placeholder="Ask ChatUltra to build, explain or ship anything…"
+                  placeholder="Ask ChatUltra to build, explain or ship anything — or type / for commands"
                   className="chatultra-scroll max-h-40 w-full resize-none bg-transparent px-2.5 py-2 text-[14px] text-zinc-100 outline-none placeholder:text-zinc-500"
                   style={{ height: "auto" }}
                   onInput={(e) => {
@@ -331,7 +739,7 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
                     t.style.height = Math.min(t.scrollHeight, 160) + "px";
                   }}
                 />
-                <div className="flex items-center gap-2 px-1 pb-0.5 pt-1">
+                <div className="flex items-center gap-1 px-1.5 pb-1.5 pt-0.5">
                   <ModelPicker
                     models={models}
                     value={model}
@@ -339,46 +747,134 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
                     onSelect={onModel}
                     onEffort={onEffort}
                     onCreateCustom={() => onOpenSettings("models")}
+                    onEditCustom={() => onOpenSettings("models")}
                   />
+
+                  {/* effort quick picker */}
+                  <Popover open={effortOpen} onOpenChange={setEffortOpen}>
+                    <PopoverTrigger asChild>
+                      <button className={cn(effortOpen ? toolBtnActive : toolBtn)} title="Reasoning effort" aria-label="Reasoning effort">
+                        <SlidersHorizontal className="h-4 w-4" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="start" className="w-[300px] border-white/10 bg-[#0c101c] p-2 shadow-2xl shadow-black/60">
+                      <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Reasoning effort</div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {EFFORTS.map((e2) => (
+                          <button
+                            key={e2.id}
+                            onClick={() => {
+                              onEffort(e2.id);
+                              setEffortOpen(false);
+                            }}
+                            title={e2.hint}
+                            className={cn(
+                              "flex flex-col items-center gap-1 rounded-lg border px-1 py-1.5 transition",
+                              e2.id === effort
+                                ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
+                                : "border-transparent text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
+                            )}
+                          >
+                            <EffortBars effort={e2} />
+                            <span className="text-[11px] font-medium">{e2.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* web access toggle */}
                   <button
-                    onClick={() => onOpenSettings("models")}
-                    className="hidden items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[12px] text-zinc-300 transition hover:bg-white/[0.08] sm:flex"
-                    title="Agent, Canvas & Video tools"
+                    onClick={() => setWebAccess((w) => !w)}
+                    className={cn(webAccess ? toolBtnActive : toolBtn)}
+                    title={webAccess ? "Web access: on — replies can cite links" : "Web access: off"}
+                    aria-pressed={webAccess}
                   >
-                    <Wrench className="h-3.5 w-3.5" /> Tools
+                    <Globe className="h-4 w-4" />
                   </button>
+
+                  {/* terminal toggle */}
+                  <button
+                    onClick={() => setTermOpen((t) => !t)}
+                    className={cn(termOpen ? toolBtnActive : toolBtn)}
+                    title="Terminal — run commands (Ctrl+`)"
+                    aria-pressed={termOpen}
+                  >
+                    <SquareTerminal className="h-4 w-4" />
+                  </button>
+
+                  {/* attach file */}
+                  <input ref={fileRef} type="file" accept=".txt,.md,.markdown,.html,.htm,.css,.js,.ts,.jsx,.tsx,.json,.csv,.xml,.svg" className="hidden" onChange={onFile} />
+                  <button onClick={() => fileRef.current?.click()} className={toolBtn} title="Attach a text file">
+                    <Paperclip className="h-4 w-4" />
+                  </button>
+
+                  {/* more menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className={toolBtn} title="More options">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="top" align="start" className="border-white/10 bg-[#0c101c] text-zinc-200">
+                      <DropdownMenuItem onClick={onNewChat} className="gap-2 text-[12.5px]">
+                        <MessageSquarePlus className="h-3.5 w-3.5" /> New chat
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSlash("/export")} className="gap-2 text-[12.5px]">
+                        <Download className="h-3.5 w-3.5" /> Export chat (.md)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onOpenSettings("github")} className="gap-2 text-[12.5px]">
+                        <FolderGit2 className="h-3.5 w-3.5" /> Push to GitHub
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={onOpenAccount} className="gap-2 text-[12.5px]">
+                        <CircleUserRound className="h-3.5 w-3.5" /> Account profile
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onOpenSettings("appearance")} className="gap-2 text-[12.5px]">
+                        <Settings className="h-3.5 w-3.5" /> Settings
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
                   <div className="ml-auto flex items-center gap-1.5">
                     {busy ? (
                       <button
                         onClick={stop}
-                        className="flex h-8 w-8 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/20"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/20"
                         title="Stop generating"
                       >
-                        <Square className="h-3.5 w-3.5" />
+                        <Square className="h-4 w-4" />
                       </button>
-                    ) : (
+                    ) : input.trim() ? (
                       <button
                         onClick={() => send()}
-                        disabled={!input.trim()}
-                        className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-xl transition",
-                          input.trim()
-                            ? "bg-gradient-to-br from-cyan-400 to-violet-500 text-black shadow-lg shadow-cyan-500/25 hover:brightness-110"
-                            : "border border-white/10 bg-white/[0.04] text-zinc-600"
-                        )}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500"
                         title="Send"
                       >
                         <ArrowUp className="h-4 w-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={startVoice}
+                        className={cn(
+                          "flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500",
+                          listening && "animate-pulse bg-blue-500"
+                        )}
+                        title={listening ? "Listening... click to stop" : "Voice input"}
+                      >
+                        <Mic className="h-4 w-4" />
                       </button>
                     )}
                   </div>
                 </div>
               </div>
               <div className="mt-1.5 text-center text-[10.5px] text-zinc-600">
-                ChatUltra can build games, preview HTML and push to GitHub · Effort: <span className="text-zinc-400">{eff.label}</span>
+                ChatUltra runs commands, builds games, previews HTML and pushes to GitHub · Model: <span className="text-zinc-400">{currentModel?.name}</span> · Effort: <span className="text-zinc-400">{eff.label}</span>
               </div>
             </div>
           </div>
+
+          {/* ---------- built-in terminal drawer ---------- */}
+          <ChatTerminal shell={shell} open={termOpen} onClose={() => setTermOpen(false)} runToken={null} />
         </div>
 
         {/* canvas / preview panel */}

@@ -1,4 +1,4 @@
-export type Provider = "openai" | "anthropic" | "google" | "luna" | "custom";
+export type Provider = "openai" | "anthropic" | "google" | "luna" | "local" | "custom";
 
 export interface ModelDef {
   id: string;
@@ -6,6 +6,8 @@ export interface ModelDef {
   provider: Provider;
   tagline: string;
   badge?: string;
+  /** tailwind classes for the letter tile (local models) */
+  tile?: string;
   /** system prompt flavor injected for this model */
   flavor: string;
 }
@@ -91,6 +93,30 @@ export const BUILT_IN_MODELS: ModelDef[] = [
     badge: "ChatUltra",
     flavor: "You are Luna 1, ChatUltra's in-house model: creative, playful, imaginative, great for brainstorming and generative art.",
   },
+  {
+    id: "gemma-2b",
+    name: "Gemma 2B",
+    provider: "local",
+    tagline: "Runs on-device · lightweight",
+    tile: "bg-sky-500/15 text-sky-300 border-sky-400/25",
+    flavor: "You behave like Gemma 2B running fully on-device: compact, efficient, direct answers with minimal fluff.",
+  },
+  {
+    id: "llama-3.1",
+    name: "Llama 3.1",
+    provider: "local",
+    tagline: "Meta open-weights · on-device",
+    tile: "bg-amber-500/15 text-amber-300 border-amber-400/25",
+    flavor: "You behave like Llama 3.1 running locally: open, helpful, well-structured answers with a pragmatic tone.",
+  },
+  {
+    id: "mistral-small",
+    name: "Mistral Small",
+    provider: "local",
+    tagline: "Efficient European model",
+    tile: "bg-orange-600/15 text-orange-300 border-orange-500/25",
+    flavor: "You behave like Mistral Small running locally: crisp, efficient, slightly terse, excellent at code snippets.",
+  },
 ];
 
 export const PROVIDER_LABEL: Record<Provider, string> = {
@@ -98,7 +124,15 @@ export const PROVIDER_LABEL: Record<Provider, string> = {
   anthropic: "Anthropic",
   google: "Google",
   luna: "ChatUltra",
+  local: "Local AI",
   custom: "Your models",
+};
+
+export const PROVIDER_URL: Partial<Record<Provider, string>> = {
+  openai: "https://openai.com",
+  anthropic: "https://www.anthropic.com",
+  google: "https://deepmind.google/models/gemini/",
+  local: "https://ollama.com/library",
 };
 
 export function findEffort(id: string): EffortDef {

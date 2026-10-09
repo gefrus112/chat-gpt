@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Sidebar, MobileTopBar, type View } from "@/components/sidebar";
+import { IconRail, HistoryFlyout, Sidebar, MobileTopBar, type View } from "@/components/sidebar";
 import { ChatView } from "@/components/chat-view";
 import { Playground } from "@/components/playground";
 import { AgentView } from "@/components/agent-view";
@@ -24,6 +24,8 @@ export default function Home() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("appearance");
   const [accountOpen, setAccountOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [railHistory, setRailHistory] = useState(false);
+  const [terminalSignal, setTerminalSignal] = useState(0);
 
   const appearance = useSettings((s) => s.appearance);
   const customModels = useCustomModels(customKey);
@@ -45,28 +47,46 @@ export default function Home() {
     setSettingsOpen(true);
   };
 
+  const newChat = () => {
+    setConversationId(null);
+    setView("chat");
+  };
+
   const viewTitle: Record<View, string> = { chat: "ChatUltra Chat", playground: "Game Playground", agent: "ChatUltra Agent", video: "AI Video Studio" };
 
   return (
     <main
       className={cn(
-        "flex h-screen overflow-hidden bg-[#070a12] text-zinc-100",
+        "relative flex h-screen overflow-hidden bg-[#070a12] text-zinc-100",
         appearance.monoMsg && "font-mono",
         `nx-fs-${appearance.fontSize}`
       )}
     >
-      {/* sidebar (desktop) */}
+      {/* icon rail (desktop) */}
       <div className="hidden lg:flex">
-        <Sidebar
+        <IconRail
           view={view}
           onView={setView}
-          conversationId={conversationId}
-          onSelectConversation={setConversationId}
-          refreshKey={historyKey}
+          onNewChat={newChat}
+          onToggleHistory={() => setRailHistory((h) => !h)}
+          historyOpen={railHistory}
+          onOpenTerminal={() => setTerminalSignal((n) => n + 1)}
           onOpenSettings={() => openSettings("appearance")}
           onOpenAccount={() => setAccountOpen(true)}
         />
       </div>
+
+      {/* history flyout next to the rail */}
+      <HistoryFlyout
+        open={railHistory}
+        onClose={() => setRailHistory(false)}
+        conversationId={conversationId}
+        onSelectConversation={(id) => {
+          setConversationId(id);
+          setView("chat");
+        }}
+        refreshKey={historyKey}
+      />
 
       {/* sidebar (mobile drawer) */}
       <div className={cn("fixed inset-0 z-40 lg:hidden", menuOpen ? "pointer-events-auto" : "pointer-events-none")}>
@@ -89,6 +109,12 @@ export default function Home() {
             refreshKey={historyKey}
             onOpenSettings={() => openSettings("appearance")}
             onOpenAccount={() => setAccountOpen(true)}
+            onOpenTerminal={() => {
+              setTerminalSignal((n) => n + 1);
+              setView("chat");
+              setMenuOpen(false);
+            }}
+            onClose={() => setMenuOpen(false)}
           />
         </div>
       </div>
@@ -105,10 +131,13 @@ export default function Home() {
             model={model}
             effort={effort}
             conversationId={conversationId}
+            terminalSignal={terminalSignal}
             onModel={setModel}
             onEffort={(e: EffortDef["id"]) => setEffort(e)}
             onConversationCreated={() => setHistoryKey((k) => k + 1)}
             onOpenSettings={openSettings}
+            onOpenAccount={() => setAccountOpen(true)}
+            onNewChat={newChat}
           />
         )}
         {view === "playground" && <Playground refreshKey={customKey} />}
