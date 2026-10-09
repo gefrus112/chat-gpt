@@ -39,3 +39,20 @@ Work Log:
 
 Stage Summary:
 - All golden paths verified end-to-end. App ready.
+
+---
+Task ID: 4
+Agent: main (Super Z)
+Task: Rebrand "NEXUS Studio" → "ChatUltra" (keep the orb icon) and push to github.com/gefrus112/chat-gpt as a website
+
+Work Log:
+- Global rebrand via sed across src/ (NEXUS→ChatUltra, nexus→chatultra, NexusGlyph→ChatUltraGlyph); verified zero leftovers; logo orb kept per user request
+- Static-site resilience so the repo works "as a website" on GitHub Pages: src/lib/demo-ai.ts (demo brain + Neon Snake/landing samples, streaming), src/lib/gh-direct.ts (browser-side GitHub REST test/push), src/lib/custom-models-client.ts (API→localStorage fallback); wired into chat-view, playground, settings-dialog, model-picker
+- GitHub Pages pipeline: next.config.ts BUILD_STATIC export mode + basePath /chat-gpt, src/lib/asset.ts basePath helper for logo/favicon, scripts/static-export.sh (API routes excluded from export, auto-restored), .nojekyll, .github/workflows/pages.yml auto-deploy workflow
+- Fixed next/image unoptimized skipping basePath (logo 404 on Pages) via NEXT_PUBLIC_BASE_PATH env
+- Rebuilt + lint clean; browser-verified live app (welcome, picker w/ CHATULTRA badge, real AI stream, playground w/ chatultra-shell, settings About) and the static export served at /chat-gpt/ (demo chat → Run → playable Neon Snake in preview)
+- Dev server recovered after Turbopack cache corruption caused by production build (rm -rf .next + restart)
+- Git: untracked db/custom.db + .zscripts + logs; committed main (ee42e68 + d8acbf5); built orphan gh-pages (93a883c) from out/ via git plumbing; remote origin = gefrus112/chat-gpt; push requires user's PAT (scripts/push-to-github.sh)
+
+Stage Summary:
+- ChatUltra rebrand complete and verified; main + gh-pages ready to push; only missing: GitHub token for the actual push
