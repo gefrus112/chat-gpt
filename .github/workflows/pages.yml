@@ -1,8 +1,8 @@
 name: Deploy ChatUltra to GitHub Pages
 
+# Pages is served from the prebuilt gh-pages branch (legacy mode).
+# Run this workflow manually only if you switch Pages to the Actions source.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
