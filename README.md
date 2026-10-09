@@ -6,6 +6,8 @@
 
 Live site: **https://gefrus112.github.io/chat-gpt/** &middot; Repo: `gefrus112/chat-gpt`
 
+![ChatUltra live on GitHub Pages](docs/screenshots/live-site.png)
+
 ---
 
 ## How it looks
