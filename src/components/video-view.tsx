@@ -81,7 +81,7 @@ export function VideoView() {
     const payload = JSON.stringify(frames.map((f) => `data:image/png;base64,${f.base64}`));
     const w = window.open("", "_blank", "noopener,width=1200,height=700");
     if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><title>NEXUS AI Video</title><style>body{margin:0;background:#05070d;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:monospace;color:#22d3ee}img{max-width:92%;max-height:82%;border-radius:12px;box-shadow:0 0 60px rgba(34,211,238,.25)}button{margin-top:14px;background:#22d3ee22;border:1px solid #22d3ee55;color:#a5f3fc;padding:8px 20px;border-radius:8px;cursor:pointer}</style></head><body><img id="f"><button id="b">⏸ Pause</button><script>var fr=${payload};var i=0;var on=true;setInterval(function(){if(on){document.getElementById('f').src=fr[i];i=(i+1)%fr.length}},900);document.getElementById('b').onclick=function(){on=!on;this.textContent=on?'⏸ Pause':'▶ Play'};document.getElementById('f').src=fr[0]</script></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><title>ChatUltra AI Video</title><style>body{margin:0;background:#05070d;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:monospace;color:#22d3ee}img{max-width:92%;max-height:82%;border-radius:12px;box-shadow:0 0 60px rgba(34,211,238,.25)}button{margin-top:14px;background:#22d3ee22;border:1px solid #22d3ee55;color:#a5f3fc;padding:8px 20px;border-radius:8px;cursor:pointer}</style></head><body><img id="f"><button id="b">⏸ Pause</button><script>var fr=${payload};var i=0;var on=true;setInterval(function(){if(on){document.getElementById('f').src=fr[i];i=(i+1)%fr.length}},900);document.getElementById('b').onclick=function(){on=!on;this.textContent=on?'⏸ Pause':'▶ Play'};document.getElementById('f').src=fr[0]</script></body></html>`);
     w.document.close();
   };
 
@@ -89,13 +89,13 @@ export function VideoView() {
     frames.forEach((f, i) => {
       const a = document.createElement("a");
       a.href = `data:image/png;base64,${f.base64}`;
-      a.download = `nexus-video-frame-${i + 1}.png`;
+      a.download = `chatultra-video-frame-${i + 1}.png`;
       a.click();
     });
   };
 
   return (
-    <div className="nexus-scroll h-full min-h-0 overflow-y-auto p-4">
+    <div className="chatultra-scroll h-full min-h-0 overflow-y-auto p-4">
       <div className="mx-auto max-w-3xl">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10">
@@ -103,7 +103,7 @@ export function VideoView() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">AI Video Studio</h2>
-            <p className="text-[12px] text-zinc-500">Describe a scene — NEXUS renders a keyframe sequence you can play & export.</p>
+            <p className="text-[12px] text-zinc-500">Describe a scene — ChatUltra renders a keyframe sequence you can play & export.</p>
           </div>
         </div>
 
@@ -193,7 +193,7 @@ export function VideoView() {
                 </span>
               </div>
             </div>
-            <div className="nexus-scroll mt-2 flex gap-2 overflow-x-auto pb-1">
+            <div className="chatultra-scroll mt-2 flex gap-2 overflow-x-auto pb-1">
               {frames.map((f, i) => (
                 <button
                   key={f.index}

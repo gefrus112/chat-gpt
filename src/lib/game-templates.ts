@@ -1,4 +1,4 @@
-// Ready-to-run single-file HTML5 game templates for the NEXUS Playground.
+// Ready-to-run single-file HTML5 game templates for the ChatUltra Playground.
 // NOTE: game code intentionally avoids template literals so it can live safely
 // inside TS template strings.
 
@@ -339,12 +339,12 @@ const BLANK = `<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>HELLO NEXUS</h1>
+<h1>HELLO CHATULTRA</h1>
 <div id="out">press the button…</div>
 <button onclick="document.getElementById('out').textContent='You clicked at '+new Date().toLocaleTimeString()">Click me</button>
 <script>
 // Start building! Or press "Build with AI" and describe your dream game.
-console.log('NEXUS playground ready');
+console.log('ChatUltra playground ready');
 </script>
 </body>
 </html>`;

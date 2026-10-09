@@ -14,19 +14,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NEXUS Studio — AI Chat, Games & GitHub",
+  title: "ChatUltra — AI Chat, Games & GitHub",
   description:
     "Codex-grade AI workspace: chat with GPT-5.2, Claude Sonnet 4.5, Gemini 3 Pro & Luna, set reasoning effort from Low to Ultra, preview HTML live, build games in the playground and push projects to GitHub.",
-  keywords: ["NEXUS", "AI chat", "ChatGPT", "Claude", "Gemini", "Codex", "game playground", "GitHub"],
-  authors: [{ name: "NEXUS Studio" }],
+  keywords: ["ChatUltra", "AI chat", "ChatGPT", "Claude", "Gemini", "Codex", "game playground", "GitHub"],
+  authors: [{ name: "ChatUltra" }],
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/logo.png`,
+    apple: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/logo.png`,
   },
   openGraph: {
-    title: "NEXUS Studio",
+    title: "ChatUltra",
     description: "AI chat, model picker, game playground, terminal & GitHub push — all in one dark studio.",
-    siteName: "NEXUS Studio",
+    siteName: "ChatUltra",
     type: "website",
   },
 };

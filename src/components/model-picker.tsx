@@ -6,6 +6,7 @@ import { ChevronsUpDown, Plus, Sparkles, Check } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BUILT_IN_MODELS, EFFORTS, PROVIDER_LABEL, type EffortDef, type ModelDef } from "@/lib/models";
 import { ClaudeIcon, GeminiIcon, LunaIcon, OpenAIIcon } from "@/components/brand-icons";
+import { listCustomModels } from "@/lib/custom-models-client";
 import { cn } from "@/lib/utils";
 
 export function ModelIcon({ model, className, size = 28 }: { model: ModelDef; className?: string; size?: number }) {
@@ -117,7 +118,7 @@ export function ModelPicker({ models, value, effort, onSelect, onEffort, onCreat
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" className="w-[380px] border-white/10 bg-[#0c101c] p-0 shadow-2xl shadow-black/60">
-        <div className="max-h-[380px] overflow-y-auto p-1.5 nexus-scroll">
+        <div className="max-h-[380px] overflow-y-auto p-1.5 chatultra-scroll">
           {groups.map((g) => (
             <div key={g.provider} className="mb-1">
               <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
@@ -204,17 +205,16 @@ export function ModelBadge({ model }: { model: ModelDef }) {
   );
 }
 
-/** helper hook to load custom models from API */
+/** helper hook to load custom models (server API with localStorage fallback) */
 export function useCustomModels(refreshKey: number) {
   const [models, setModels] = useState<(ModelDef & { avatar?: string | null })[]>([]);
   useEffect(() => {
     let alive = true;
-    fetch("/api/custom-models")
-      .then((r) => r.json())
-      .then((d) => {
+    listCustomModels()
+      .then((list) => {
         if (!alive) return;
-        const list = (d.models ?? []).map(
-          (m: { id: string; name: string; avatar: string | null; baseModel: string; systemPrompt: string; accent: string; tagline: string }) => ({
+        setModels(
+          list.map((m) => ({
             id: `custom:${m.id}`,
             name: m.name,
             provider: "custom" as const,
@@ -222,9 +222,8 @@ export function useCustomModels(refreshKey: number) {
             badge: "Custom",
             avatar: m.avatar,
             flavor: m.systemPrompt || "",
-          })
+          }))
         );
-        setModels(list);
       })
       .catch(() => setModels([]));
     return () => {

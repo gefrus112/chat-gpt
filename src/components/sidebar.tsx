@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { MessageSquarePlus, MessageSquare, Boxes, Bot, Clapperboard, Settings, Trash2, X, Pin } from "lucide-react";
 import { GitHubIcon } from "@/components/brand-icons";
 import { useSettings } from "@/lib/store";
+import { asset } from "@/lib/asset";
 import { cn } from "@/lib/utils";
 
 export type View = "chat" | "playground" | "agent" | "video";
@@ -58,8 +59,8 @@ export function Sidebar({ view, onView, conversationId, onSelectConversation, re
       {/* logo */}
       <div className="flex items-center gap-2.5 px-3.5 pb-2 pt-4">
         <Image
-          src="/logo.png"
-          alt="NEXUS"
+          src={asset("/logo.png")}
+          alt="ChatUltra"
           width={34}
           height={34}
           className="rounded-xl border border-white/10 shadow-lg shadow-cyan-500/10"
@@ -67,7 +68,7 @@ export function Sidebar({ view, onView, conversationId, onSelectConversation, re
           unoptimized
         />
         <div>
-          <div className="text-[15px] font-bold tracking-wide text-white">NEXUS</div>
+          <div className="text-[15px] font-bold tracking-wide text-white">ChatUltra</div>
           <div className="-mt-0.5 text-[9.5px] uppercase tracking-[0.18em] text-zinc-500">AI Studio</div>
         </div>
       </div>
@@ -106,7 +107,7 @@ export function Sidebar({ view, onView, conversationId, onSelectConversation, re
       {/* history */}
       <div className="mt-4 min-h-0 flex-1 overflow-hidden px-3">
         <div className="px-1 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Recent</div>
-        <div className="nexus-scroll flex h-[calc(100%-28px)] flex-col gap-0.5 overflow-y-auto pb-2">
+        <div className="chatultra-scroll flex h-[calc(100%-28px)] flex-col gap-0.5 overflow-y-auto pb-2">
           {conversations.length === 0 && <div className="px-1 text-[11.5px] text-zinc-600">No chats yet</div>}
           {conversations.map((c) => (
             <div

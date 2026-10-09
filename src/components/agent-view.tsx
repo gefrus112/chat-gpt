@@ -117,14 +117,14 @@ export function AgentView() {
   const doneCount = results.filter((r) => r.done).length;
 
   return (
-    <div className="nexus-scroll h-full min-h-0 overflow-y-auto p-4">
+    <div className="chatultra-scroll h-full min-h-0 overflow-y-auto p-4">
       <div className="mx-auto max-w-3xl">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-violet-400/30 bg-violet-500/10">
             <Bot className="h-5.5 w-5.5 text-violet-300" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">NEXUS Agent</h2>
+            <h2 className="text-lg font-semibold text-white">ChatUltra Agent</h2>
             <p className="text-[12px] text-zinc-500">Give a goal — the agent plans the steps and executes them one by one.</p>
           </div>
         </div>

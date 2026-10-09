@@ -36,7 +36,7 @@ export function GitHubIcon({ className }: { className?: string }) {
   );
 }
 
-/** Luna 1 — NEXUS in-house model: crescent moon + orbit spark */
+/** Luna 1 — ChatUltra in-house model: crescent moon + orbit spark */
 export function LunaIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={cn("h-4 w-4", className)} aria-label="Luna" role="img">
@@ -56,8 +56,8 @@ export function LunaIcon({ className }: { className?: string }) {
   );
 }
 
-/** NEXUS app glyph — hexagonal core matching generated logo */
-export function NexusGlyph({ className }: { className?: string }) {
+/** ChatUltra app glyph — hexagonal core matching generated logo */
+export function ChatUltraGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" fill="none" className={cn("h-6 w-6", className)} aria-hidden>
       <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#nx-bg)" />

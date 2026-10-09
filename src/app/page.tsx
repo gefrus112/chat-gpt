@@ -43,7 +43,7 @@ export default function Home() {
     setSettingsOpen(true);
   };
 
-  const viewTitle: Record<View, string> = { chat: "NEXUS Chat", playground: "Game Playground", agent: "NEXUS Agent", video: "AI Video Studio" };
+  const viewTitle: Record<View, string> = { chat: "ChatUltra Chat", playground: "Game Playground", agent: "ChatUltra Agent", video: "AI Video Studio" };
 
   return (
     <main

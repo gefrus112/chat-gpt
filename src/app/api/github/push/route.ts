@@ -13,7 +13,7 @@ const ghHeaders = (token: string) => ({
   Accept: "application/vnd.github+json",
   "X-GitHub-Api-Version": "2022-11-28",
   "Content-Type": "application/json",
-  "User-Agent": "NEXUS-Studio",
+  "User-Agent": "ChatUltra",
 });
 
 export async function POST(req: NextRequest) {
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     const token = (body.token ?? "").toString().trim();
     const repoRaw = (body.repo ?? "").toString();
     const branch = (body.branch ?? "").toString().trim() || null;
-    const message = ((body.message ?? "Push from NEXUS Studio").toString() || "Push from NEXUS Studio").slice(0, 200);
+    const message = ((body.message ?? "Push from ChatUltra").toString() || "Push from ChatUltra").slice(0, 200);
     const files: { path: string; content: string }[] = Array.isArray(body.files) ? body.files : [];
 
     if (!token) return NextResponse.json({ error: "GitHub token missing. Add one in Settings → GitHub." }, { status: 400 });

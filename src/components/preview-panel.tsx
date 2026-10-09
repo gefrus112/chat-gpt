@@ -119,7 +119,7 @@ export function PreviewPanel({ code, onCodeChange, title = "Canvas", onClose, cl
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             spellCheck={false}
-            className="nexus-scroll min-h-0 flex-1 resize-none bg-[#080b13] p-3 font-mono text-[12.5px] leading-relaxed text-zinc-200 outline-none"
+            className="chatultra-scroll min-h-0 flex-1 resize-none bg-[#080b13] p-3 font-mono text-[12.5px] leading-relaxed text-zinc-200 outline-none"
           />
           {onCodeChange && (
             <div className="flex items-center justify-between border-t border-white/10 bg-[#0c101c] px-3 py-2">

@@ -8,10 +8,12 @@ import { GAME_TEMPLATES } from "@/lib/game-templates";
 import { Terminal } from "@/components/terminal";
 import { Button } from "@/components/ui/button";
 import { useSettings, normalizeRepo } from "@/lib/store";
+import { demoReply } from "@/lib/demo-ai";
+import { ghPushFiles } from "@/lib/gh-direct";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const LS_KEY = "nexus-playground-project";
+const LS_KEY = "chatultra-playground-project";
 
 export function extractHtml(md: string): string | null {
   const fence = /```(?:html|htm)?\s*\n([\s\S]*?)```/i.exec(md);
@@ -25,7 +27,7 @@ export function extractHtml(md: string): string | null {
 
 function buildPopoutDoc(code: string): string {
   const seed = JSON.stringify(code).replace(/</g, "\\u003c");
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>NEXUS — External Game Editor</title><style>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ChatUltra — External Game Editor</title><style>
   body{margin:0;height:100vh;display:flex;flex-direction:column;background:#070a12;color:#e2e8f0;font-family:ui-monospace,monospace}
   header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #1e293b;background:#0c101c}
   header b{color:#22d3ee;letter-spacing:2px}
@@ -38,7 +40,7 @@ function buildPopoutDoc(code: string): string {
   .col{display:flex;flex-direction:column;flex:1;min-width:0}
   .label{padding:5px 12px;font-size:10px;letter-spacing:2px;color:#64748b;background:#0a0e18;border-bottom:1px solid #1e293b}
   </style></head><body>
-  <header><b>NEXUS</b> external game editor <span class="spacer"></span><span style="font-size:11px;color:#64748b">edits here sync back to the studio</span><button id="sync">⇦ Send changes to Studio</button><button id="run">▶ Run</button></header>
+  <header><b>ChatUltra</b> external game editor <span class="spacer"></span><span style="font-size:11px;color:#64748b">edits here sync back to the studio</span><button id="sync">⇦ Send changes to Studio</button><button id="run">▶ Run</button></header>
   <main>
     <div class="col"><div class="label">EDITOR</div><textarea id="ed" spellcheck="false"></textarea></div>
     <div class="col"><div class="label">LIVE PREVIEW</div><iframe id="pv" sandbox="allow-scripts allow-modals allow-pointer-lock"></iframe></div>
@@ -49,7 +51,7 @@ function buildPopoutDoc(code: string): string {
   ed.value=seed;pv.srcdoc=seed;
   document.getElementById('run').onclick=function(){pv.srcdoc=ed.value};
   document.getElementById('sync').onclick=function(){
-    try{window.opener.postMessage({type:'nexus-code-sync',code:ed.value},'*');this.textContent='✓ sent';var b=this;setTimeout(function(){b.textContent='⇦ Send changes to Studio'},1200)}catch(e){alert('lost connection to studio')}
+    try{window.opener.postMessage({type:'chatultra-code-sync',code:ed.value},'*');this.textContent='✓ sent';var b=this;setTimeout(function(){b.textContent='⇦ Send changes to Studio'},1200)}catch(e){alert('lost connection to studio')}
   };
   </script></body></html>`;
 }
@@ -84,7 +86,7 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
   // listen for sync from popout
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
-      if (e.data?.type === "nexus-code-sync" && typeof e.data.code === "string") {
+      if (e.data?.type === "chatultra-code-sync" && typeof e.data.code === "string") {
         setCode(e.data.code);
         setPreviewNonce((n) => n + 1);
         toast({ title: "Game synced", description: "Changes from the external editor were merged in." });
@@ -124,6 +126,7 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
           effort: "max",
         }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
       let md = text;
       try {
@@ -154,7 +157,18 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
         toast({ title: "Could not parse game HTML", description: "Try rephrasing the prompt." });
       }
     } catch {
-      toast({ title: "Build failed", description: "The AI service did not respond. Try again." });
+      // static hosting (e.g. GitHub Pages) → fall back to the built-in demo brain
+      const demo = demoReply(`Build a game: ${prompt}`);
+      const demoHtml = extractHtml(demo);
+      if (demoHtml) {
+        setCode(demoHtml);
+        setProjectName(prompt.slice(0, 30) || "AI Game");
+        setActiveTemplate("ai");
+        setPreviewNonce((n) => n + 1);
+        toast({ title: "Demo game loaded ⚡", description: "Static demo mode — replace via the full ChatUltra server." });
+      } else {
+        toast({ title: "Build failed", description: "The AI service did not respond. Try again." });
+      }
     } finally {
       setBuilding(false);
     }
@@ -165,23 +179,39 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
     const repo = normalizeRepo(gh.repo);
     if (!repo) return "✗ invalid repo in Settings";
     setPushing(true);
+    const payload = {
+      token: gh.token,
+      repo: gh.repo,
+      branch: gh.branch || "main",
+      message: `ChatUltra Playground: ${projectName}`,
+      files: [
+        { path: "index.html", content: code },
+        { path: "README.md", content: `# ${projectName}\n\nBuilt with ChatUltra playground.\n` },
+      ],
+    };
     try {
-      const res = await fetch("/api/github/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: gh.token,
-          repo: gh.repo,
-          branch: gh.branch || "main",
-          message: `NEXUS Playground: ${projectName}`,
-          files: [
-            { path: "index.html", content: code },
-            { path: "README.md", content: `# ${projectName}\n\nBuilt with NEXUS Studio playground.\n` },
-          ],
-        }),
-      });
-      const j = await res.json();
-      if (res.ok && j.ok) {
+      let j: { ok?: boolean; error?: string; repo?: string; branch?: string; pushed?: number; total?: number } | null = null;
+      try {
+        const res = await fetch("/api/github/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.status !== 404) j = await res.json();
+      } catch {
+        j = null; // no server (static hosting)
+      }
+      if (!j) {
+        // push straight from the browser via the GitHub REST API
+        const r = await ghPushFiles(payload);
+        if (r.ok) {
+          toast({ title: "Pushed to GitHub", description: `${payload.repo} · ${payload.branch} · ${payload.files.length} files` });
+          return `✓ pushed ${payload.files.length} files to ${payload.repo}@${payload.branch}`;
+        }
+        toast({ title: "Push failed", description: r.error ?? "unknown error" });
+        return `✗ ${r.error ?? "push failed"}`;
+      }
+      if (j.ok) {
         toast({ title: "Pushed to GitHub", description: `${j.repo} · ${j.branch} · ${j.pushed}/${j.total} files` });
         return `✓ pushed ${j.pushed}/${j.total} files to ${j.repo}@${j.branch}`;
       }
@@ -209,7 +239,7 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
   return (
     <div className="flex h-full min-h-0 gap-3 p-3">
       {/* left rail: templates + AI builder */}
-      <div className="nexus-scroll hidden w-56 shrink-0 flex-col gap-2 overflow-y-auto lg:flex">
+      <div className="chatultra-scroll hidden w-56 shrink-0 flex-col gap-2 overflow-y-auto lg:flex">
         <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
           <Boxes className="h-3.5 w-3.5" /> Game templates
         </div>
@@ -243,7 +273,7 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g. zombie survival arena with WASD, waves, powerups…"
             rows={3}
-            className="nexus-scroll w-full resize-none rounded-md border border-white/10 bg-black/30 p-2 text-[12px] text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-400/40"
+            className="chatultra-scroll w-full resize-none rounded-md border border-white/10 bg-black/30 p-2 text-[12px] text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-400/40"
           />
           <Button
             size="sm"
@@ -301,7 +331,7 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             spellCheck={false}
-            className="nexus-scroll min-h-0 flex-1 resize-none bg-[#080b13] p-3 font-mono text-[12px] leading-relaxed text-zinc-200 outline-none"
+            className="chatultra-scroll min-h-0 flex-1 resize-none bg-[#080b13] p-3 font-mono text-[12px] leading-relaxed text-zinc-200 outline-none"
           />
         </div>
         <Terminal files={files} projectName={projectName} onPushToGithub={pushToGithub} className="h-52 shrink-0" />

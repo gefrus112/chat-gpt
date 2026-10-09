@@ -45,7 +45,7 @@ export const useSettings = create<SettingsState>()(
       setGh: (g) => set((s) => ({ gh: { ...s.gh, ...g } })),
       setAppearance: (a) => set((s) => ({ appearance: { ...s.appearance, ...a } })),
     }),
-    { name: "nexus-settings" }
+    { name: "chatultra-settings" }
   )
 );
 

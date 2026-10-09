@@ -5,7 +5,7 @@ import { findEffort, BUILT_IN_MODELS } from "@/lib/models";
 
 export const maxDuration = 300;
 
-const BASE_PROMPT = `You are NEXUS AI, the assistant inside "NEXUS Studio" — a dark, Codex-style AI development studio. You are capable, friendly and precise.
+const BASE_PROMPT = `You are ChatUltra AI, the assistant inside "ChatUltra" — a dark, Codex-style AI development studio. You are capable, friendly and precise.
 
 Formatting rules:
 - Always answer in Markdown.
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     } else if (modelId.startsWith("custom:")) {
       const cm = await db.customModel.findUnique({ where: { id: modelId.slice(7) } });
       if (cm) {
-        flavor = `You are "${cm.name}", a custom AI model created by the user in NEXUS Studio.${cm.systemPrompt ? " " + cm.systemPrompt : ""}${cm.tagline ? ` (About you: ${cm.tagline})` : ""}`;
+        flavor = `You are "${cm.name}", a custom AI model created by the user in ChatUltra.${cm.systemPrompt ? " " + cm.systemPrompt : ""}${cm.tagline ? ` (About you: ${cm.tagline})` : ""}`;
       }
     }
 

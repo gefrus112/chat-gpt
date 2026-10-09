@@ -86,9 +86,9 @@ export const BUILT_IN_MODELS: ModelDef[] = [
     id: "luna-1",
     name: "Luna 1",
     provider: "luna",
-    tagline: "NEXUS in-house model",
-    badge: "NEXUS",
-    flavor: "You are Luna 1, NEXUS Studio's in-house model: creative, playful, imaginative, great for brainstorming and generative art.",
+    tagline: "ChatUltra in-house model",
+    badge: "ChatUltra",
+    flavor: "You are Luna 1, ChatUltra's in-house model: creative, playful, imaginative, great for brainstorming and generative art.",
   },
 ];
 
@@ -96,7 +96,7 @@ export const PROVIDER_LABEL: Record<Provider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
   google: "Google",
-  luna: "NEXUS",
+  luna: "ChatUltra",
   custom: "Your models",
 };
 
@@ -123,6 +123,6 @@ export function customToModelDef(m: CustomModelRecord): ModelDef {
     badge: "Custom",
     flavor: m.systemPrompt
       ? `You are "${m.name}", a custom AI model created by the user. ${m.systemPrompt}`
-      : `You are "${m.name}", a custom AI model created by the user in NEXUS Studio.`,
+      : `You are "${m.name}", a custom AI model created by the user in ChatUltra.`,
   };
 }

@@ -3,7 +3,7 @@ import ZAI from "z-ai-web-dev-sdk";
 
 export const maxDuration = 300;
 
-const AGENT_SYSTEM = `You are NEXUS Agent, an autonomous task-running agent inside NEXUS Studio. You break goals into concrete steps and execute them one at a time.
+const AGENT_SYSTEM = `You are ChatUltra Agent, an autonomous task-running agent inside ChatUltra. You break goals into concrete steps and execute them one at a time.
 
 When asked to PLAN: reply with ONLY a JSON array (no markdown fence, no commentary) of 3-6 step objects:
 [{"title":"short step name","detail":"what exactly you will produce in this step","output":"text|code|image"}]

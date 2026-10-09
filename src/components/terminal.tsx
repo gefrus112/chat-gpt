@@ -45,7 +45,7 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
     if (lines.length === 0) {
       BANNER.forEach((b) => push(b, "text-cyan-400/80"));
       push("");
-      push("NEXUS Shell v1.4.0 — Linux-style project terminal", "text-zinc-500");
+      push("ChatUltra Shell v1.4.0 — Linux-style project terminal", "text-zinc-500");
       push("Type `help` for available commands.", "text-zinc-500");
       push("");
     }
@@ -81,7 +81,7 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
         break;
       case "ls":
         push(`total ${files.length}`, "text-zinc-500");
-        files.forEach((f) => push(`-rw-r--r--  1 nexus nexus ${String(f.content.length).padStart(6)}  ${f.path}`, "text-sky-300"));
+        files.forEach((f) => push(`-rw-r--r--  1 chatultra chatultra ${String(f.content.length).padStart(6)}  ${f.path}`, "text-sky-300"));
         if (!files.length) push("(no files — build something first)", "text-zinc-500");
         break;
       case "cat": {
@@ -96,7 +96,7 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
           ["> project@1.0.0 dev", "text-zinc-300"],
           ["> next dev --turbopack", "text-zinc-300"],
           ["", undefined],
-          ["  ▲ NEXUS Dev  ready in 412 ms", "text-emerald-400"],
+          ["  ▲ ChatUltra Dev  ready in 412 ms", "text-emerald-400"],
           ["  - Local:  http://localhost:5173", "text-zinc-300"],
           ["preview is live in the Play window →", "text-cyan-300"],
         ]);
@@ -122,7 +122,7 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
           files.forEach((f) => push(`        modified:   ${f.path}`, "text-rose-300"));
           push(gh.token ? "token: loaded from Settings ✓" : "token: MISSING — set it in Settings → GitHub", gh.token ? "text-emerald-400" : "text-amber-400");
         } else if (sub === "log") {
-          push("f3a9c21 (HEAD -> main) feat: latest NEXUS build", "text-amber-300");
+          push("f3a9c21 (HEAD -> main) feat: latest ChatUltra build", "text-amber-300");
           push("8d21b04 chore: project scaffold", "text-amber-300");
         } else if (sub === "push") {
           if (!gh.token) {
@@ -136,13 +136,13 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
           push(res, res.includes("✓") ? "text-emerald-400" : "text-rose-400");
           setBusy(false);
         } else {
-          push(`git: '${sub || ""}' is not a nexus-shell command. try: git status | git log | git push`, "text-rose-400");
+          push(`git: '${sub || ""}' is not a chatultra-shell command. try: git status | git log | git push`, "text-rose-400");
         }
         break;
       }
       case "models":
         push("active models:", "text-cyan-300");
-        ["GPT-5.2 (OpenAI)", "GPT-5.2 Codex (OpenAI)", "o4 Mini (OpenAI)", "Claude Sonnet 4.5 (Anthropic)", "Claude Opus 4.1 (Anthropic)", "Gemini 3 Pro (Google)", "Gemini 2.5 Flash (Google)", "Luna 1 (NEXUS)"].forEach((m) =>
+        ["GPT-5.2 (OpenAI)", "GPT-5.2 Codex (OpenAI)", "o4 Mini (OpenAI)", "Claude Sonnet 4.5 (Anthropic)", "Claude Opus 4.1 (Anthropic)", "Gemini 3 Pro (Google)", "Gemini 2.5 Flash (Google)", "Luna 1 (ChatUltra)"].forEach((m) =>
           push(`  ● ${m}`, "text-zinc-300")
         );
         break;
@@ -150,27 +150,27 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
         push(args.join(" "), "text-zinc-200");
         break;
       case "whoami":
-        push("nexus", "text-zinc-200");
+        push("chatultra", "text-zinc-200");
         break;
       case "date":
         push(new Date().toString(), "text-zinc-200");
         break;
       case "about":
-        push(`${projectName} — built with NEXUS Studio. ${files.length} file(s).`, "text-zinc-200");
+        push(`${projectName} — built with ChatUltra. ${files.length} file(s).`, "text-zinc-200");
         break;
       case "clear":
         setLines([]);
         break;
       case "neofetch":
-        push("nexus@studio", "text-cyan-300");
-        push("OS: NEXUS OS 1.4 (web)", "text-zinc-300");
-        push("Shell: nexus-shell 1.4.0", "text-zinc-300");
-        push("Terminal: NEXUS Terminal (dark)", "text-zinc-300");
+        push("ultra@chatultra", "text-cyan-300");
+        push("OS: ChatUltra OS 1.4 (web)", "text-zinc-300");
+        push("Shell: chatultra-shell 1.4.0", "text-zinc-300");
+        push("Terminal: ChatUltra Terminal (dark)", "text-zinc-300");
         push("CPU: Neural Core i9 (virtual)", "text-zinc-300");
         push("Memory: 42 MiB / 512 MiB", "text-zinc-300");
         break;
       default:
-        push(`nexus-shell: command not found: ${bin}`, "text-rose-400");
+        push(`chatultra-shell: command not found: ${bin}`, "text-rose-400");
     }
   };
 
@@ -181,7 +181,7 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
     }
   };
 
-  const prompt = () => `nexus@studio:~/projects/${projectName.replace(/\s+/g, "-").toLowerCase()}$`;
+  const prompt = () => `ultra@chatultra:~/projects/${projectName.replace(/\s+/g, "-").toLowerCase()}$`;
 
   const onKey = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (busy) return;
@@ -223,10 +223,10 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
           <i className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
           <i className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
         </span>
-        <span className="font-mono text-[11px] text-zinc-500">nexus-shell — {projectName}</span>
+        <span className="font-mono text-[11px] text-zinc-500">chatultra-shell — {projectName}</span>
         {busy && <span className="ml-auto animate-pulse font-mono text-[10px] text-amber-400">● busy</span>}
       </div>
-      <div ref={scrollRef} className="nexus-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-[12px] leading-[1.55]">
+      <div ref={scrollRef} className="chatultra-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-[12px] leading-[1.55]">
         {lines.map((l) => (
           <div key={l.id} className={cn("whitespace-pre-wrap break-words", l.cls ?? "text-zinc-300")}>
             {l.text || "\u00A0"}

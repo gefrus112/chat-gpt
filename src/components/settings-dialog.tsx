@@ -14,9 +14,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ACCENTS, DEFAULT_REPO, useSettings, normalizeRepo } from "@/lib/store";
 import { BUILT_IN_MODELS } from "@/lib/models";
+import { listCustomModels, createCustomModel, deleteCustomModel } from "@/lib/custom-models-client";
+import { ghTestConnection } from "@/lib/gh-direct";
 import { GitHubIcon } from "@/components/brand-icons";
 import { Loader2, Plus, Trash2, Upload, CheckCircle2, XCircle, Bot } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { asset } from "@/lib/asset";
 import { cn } from "@/lib/utils";
 
 export type SettingsTab = "appearance" | "github" | "models" | "about";
@@ -85,10 +88,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadCustom = () => {
-    fetch("/api/custom-models")
-      .then((r) => r.json())
-      .then((d) => setCustomModels(d.models ?? []))
-      .catch(() => setCustomModels([]));
+    listCustomModels().then(setCustomModels).catch(() => setCustomModels([]));
   };
 
   useEffect(() => {
@@ -102,12 +102,23 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch("/api/github/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: gh.token, repo: gh.repo }),
-      });
-      const j = await res.json();
+      let j: { ok?: boolean; login?: string; full_name?: string; default_branch?: string; canPush?: boolean; error?: string };
+      try {
+        const res = await fetch("/api/github/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: gh.token, repo: gh.repo }),
+        });
+        if (res.status === 404) throw new TypeError("no server");
+        j = await res.json();
+      } catch (e) {
+        if (e instanceof TypeError) {
+          // static hosting → verify token+repo straight from the browser
+          j = await ghTestConnection(gh.token, gh.repo);
+        } else {
+          throw e;
+        }
+      }
       if (j.ok) {
         setGh({ connected: true });
         setTestResult({ ok: true, msg: `Connected as ${j.login} → ${j.full_name} (${j.default_branch}${j.canPush ? ", push allowed" : ", READ ONLY"})` });
@@ -129,13 +140,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
     }
     setCreating(true);
     try {
-      const res = await fetch("/api/custom-models", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, tagline, baseModel, systemPrompt, accent, avatar }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "failed");
+      await createCustomModel({ name: name.trim(), tagline, baseModel, systemPrompt, accent, avatar });
       toast({ title: `${name} is live ⚡`, description: "It now appears in your model picker." });
       setName("");
       setTagline("");
@@ -151,7 +156,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
   };
 
   const deleteModel = async (id: string) => {
-    await fetch(`/api/custom-models/${id}`, { method: "DELETE" });
+    await deleteCustomModel(id);
     loadCustom();
     onCustomModelsChanged();
     toast({ title: "Model deleted" });
@@ -165,7 +170,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
         <DialogHeader className="border-b border-white/10 px-5 py-4">
           <DialogTitle className="text-[15px] text-white">Settings</DialogTitle>
           <DialogDescription className="text-[12px] text-zinc-500">
-            Customize NEXUS Studio — theme, GitHub, your own AI models.
+            Customize ChatUltra — theme, GitHub, your own AI models.
           </DialogDescription>
         </DialogHeader>
 
@@ -182,7 +187,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
           </div>
 
           {/* APPEARANCE */}
-          <TabsContent value="appearance" className="nexus-scroll m-0 overflow-y-auto px-5 py-4">
+          <TabsContent value="appearance" className="chatultra-scroll m-0 overflow-y-auto px-5 py-4">
             <div className="space-y-5">
               <div>
                 <Label className="text-[12.5px] text-zinc-300">Accent color</Label>
@@ -236,14 +241,14 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
                 </Select>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-[12px] text-zinc-400">
-                Theme: <span className="text-cyan-300">Dark</span> (always) — NEXUS is designed dark-first, like Codex. Accent preview:{" "}
+                Theme: <span className="text-cyan-300">Dark</span> (always) — ChatUltra is designed dark-first, like Codex. Accent preview:{" "}
                 <span className="font-mono" style={{ color: appearance.accent }}>{appearance.accent}</span>
               </div>
             </div>
           </TabsContent>
 
           {/* MODELS */}
-          <TabsContent value="models" className="nexus-scroll m-0 overflow-y-auto px-5 py-4">
+          <TabsContent value="models" className="chatultra-scroll m-0 overflow-y-auto px-5 py-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-[200px_1fr]">
               <div className="space-y-3">
                 <div
@@ -270,7 +275,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
                   }}
                 />
                 <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2 text-[11px] leading-relaxed text-zinc-500">
-                  Your model runs on the NEXUS engine with the persona & system prompt you define — then shows up in the model picker with your picture.
+                  Your model runs on the ChatUltra engine with the persona & system prompt you define — then shows up in the model picker with your picture.
                 </div>
               </div>
               <div className="space-y-2.5">
@@ -293,7 +298,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
                   value={systemPrompt}
                   onChange={(e) => setSystemPrompt(e.target.value)}
                   rows={4}
-                  className="nexus-scroll border-white/10 bg-white/[0.04]"
+                  className="chatultra-scroll border-white/10 bg-white/[0.04]"
                 />
                 <div className="flex items-center gap-2">
                   <span className="text-[11.5px] text-zinc-500">Accent</span>
@@ -340,12 +345,12 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
           </TabsContent>
 
           {/* GITHUB */}
-          <TabsContent value="github" className="nexus-scroll m-0 overflow-y-auto px-5 py-4">
+          <TabsContent value="github" className="chatultra-scroll m-0 overflow-y-auto px-5 py-4">
             <div className="space-y-4">
               <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
                 <GitHubIcon className="mt-0.5 h-5 w-5 text-zinc-200" />
                 <div className="text-[12px] leading-relaxed text-zinc-400">
-                  NEXUS pushes your Playground games & projects straight to GitHub. Create a token at{" "}
+                  ChatUltra pushes your Playground games & projects straight to GitHub. Create a token at{" "}
                   <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noreferrer" className="text-cyan-300 underline underline-offset-2">
                     github.com/settings/tokens
                   </a>{" "}
@@ -402,17 +407,17 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
           </TabsContent>
 
           {/* ABOUT */}
-          <TabsContent value="about" className="nexus-scroll m-0 overflow-y-auto px-5 py-4">
+          <TabsContent value="about" className="chatultra-scroll m-0 overflow-y-auto px-5 py-4">
             <div className="flex flex-col items-center py-4 text-center">
-              <Image src="/logo.png" alt="NEXUS" width={72} height={72} className="rounded-2xl border border-white/10" unoptimized />
-              <h3 className="mt-3 text-lg font-semibold text-white">NEXUS Studio</h3>
+              <Image src={asset("/logo.png")} alt="ChatUltra" width={72} height={72} className="rounded-2xl border border-white/10" unoptimized />
+              <h3 className="mt-3 text-lg font-semibold text-white">ChatUltra</h3>
               <p className="mt-1 text-[12px] text-zinc-500">v1.4.0 · Codex-grade AI workspace</p>
               <div className="mt-4 grid w-full max-w-sm grid-cols-2 gap-2 text-left text-[12px]">
                 {[
                   ["Models", "8 built-in + your customs"],
                   ["Effort levels", "Low → Ultra (6)"],
                   ["Playground", "Game builder + popout editor"],
-                  ["Terminal", "nexus-shell (Linux-style)"],
+                  ["Terminal", "chatultra-shell (Linux-style)"],
                   ["Canvas", "HTML live preview + Run"],
                   ["GitHub", "token push · gefrus112/chat-gpt"],
                 ].map(([k, v]) => (

@@ -7,6 +7,8 @@ import { Markdown, StudioContext } from "@/components/markdown";
 import { ModelPicker, ModelIcon } from "@/components/model-picker";
 import { PreviewPanel } from "@/components/preview-panel";
 import { findEffort, type EffortDef, type ModelDef } from "@/lib/models";
+import { demoReply, streamDemoReply } from "@/lib/demo-ai";
+import { asset } from "@/lib/asset";
 import { cn } from "@/lib/utils";
 
 export interface ChatMessage {
@@ -102,6 +104,7 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    let gotDelta = false;
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -132,6 +135,7 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
                 onConversationCreated(evt.conversationId);
               }
             } else if (evt.type === "delta") {
+              gotDelta = true;
               setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: x.content + evt.text } : x)));
             } else if (evt.type === "error") {
               throw new Error(evt.error);
@@ -145,13 +149,23 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
       }
     } catch (err) {
       const aborted = err instanceof DOMException && err.name === "AbortError";
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === aiId
-            ? { ...x, content: x.content || (aborted ? "_stopped._" : `⚠️ ${err instanceof Error ? err.message : "Something went wrong — try again."}`) }
-            : x
-        )
-      );
+      if (!aborted && !gotDelta) {
+        // static hosting (e.g. GitHub Pages) → no backend; stream the built-in demo brain instead
+        const reply = demoReply(msg);
+        await streamDemoReply(
+          reply,
+          (text) => setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: text } : x))),
+          ctrl.signal
+        );
+      } else {
+        setMessages((m) =>
+          m.map((x) =>
+            x.id === aiId
+              ? { ...x, content: x.content || (aborted ? "_stopped._" : `⚠️ ${err instanceof Error ? err.message : "Something went wrong — try again."}`) }
+              : x
+          )
+        );
+      }
     } finally {
       setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, streaming: false } : x)));
       setBusy(false);
@@ -179,8 +193,8 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
             <div className="flex flex-1 flex-col items-center justify-center px-4">
               <div className={cn("relative mb-5", "animate-[nxPulse_4s_ease-in-out_infinite]")}>
                 <Image
-                  src="/logo.png"
-                  alt="NEXUS AI"
+                  src={asset("/logo.png")}
+                  alt="ChatUltra AI"
                   width={110}
                   height={110}
                   className="rounded-3xl border border-white/10 shadow-2xl shadow-cyan-500/20"
@@ -189,7 +203,7 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
                 />
               </div>
               <h1 className="bg-gradient-to-r from-cyan-200 via-white to-violet-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
-                NEXUS Studio
+                ChatUltra
               </h1>
               <p className="mt-2 text-[13.5px] text-zinc-400">
                 Chat · Build games · Ship to GitHub — your Codex-grade AI workspace
@@ -214,12 +228,12 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
             </div>
           ) : (
             /* ---------- messages ---------- */
-            <div ref={scrollRef} className="nexus-scroll min-h-0 flex-1 overflow-y-auto px-4 py-6">
+            <div ref={scrollRef} className="chatultra-scroll min-h-0 flex-1 overflow-y-auto px-4 py-6">
               <div className="mx-auto flex max-w-3xl flex-col gap-6">
                 {messages.map((m) => (
                   <div key={m.id} className={cn("flex gap-3", m.role === "user" && "justify-end")}>
                     {m.role === "assistant" && (
-                      <Image src="/logo.png" alt="NEXUS" width={30} height={30} className="mt-0.5 h-[30px] w-[30px] rounded-xl border border-white/10" unoptimized />
+                      <Image src={asset("/logo.png")} alt="ChatUltra" width={30} height={30} className="mt-0.5 h-[30px] w-[30px] rounded-xl border border-white/10" unoptimized />
                     )}
                     <div className={cn("min-w-0", m.role === "user" ? "max-w-[85%]" : "max-w-full flex-1")}>
                       {m.role === "user" ? (
@@ -266,8 +280,8 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={onTaKey}
                   rows={1}
-                  placeholder="Ask NEXUS to build, explain or ship anything…"
-                  className="nexus-scroll max-h-40 w-full resize-none bg-transparent px-2.5 py-2 text-[14px] text-zinc-100 outline-none placeholder:text-zinc-500"
+                  placeholder="Ask ChatUltra to build, explain or ship anything…"
+                  className="chatultra-scroll max-h-40 w-full resize-none bg-transparent px-2.5 py-2 text-[14px] text-zinc-100 outline-none placeholder:text-zinc-500"
                   style={{ height: "auto" }}
                   onInput={(e) => {
                     const t = e.currentTarget;
@@ -319,7 +333,7 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
                 </div>
               </div>
               <div className="mt-1.5 text-center text-[10.5px] text-zinc-600">
-                NEXUS can build games, preview HTML and push to GitHub · Effort: <span className="text-zinc-400">{eff.label}</span>
+                ChatUltra can build games, preview HTML and push to GitHub · Effort: <span className="text-zinc-400">{eff.label}</span>
               </div>
             </div>
           </div>

@@ -1,54 +1,28 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# deps / build
+node_modules/
+.next/
+out/
+dist/
+bun.lockb
 
-# dependencies
-node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# runtime data
+db/*.db
+db/*.db-journal
 
-# testing
-/coverage
+# env & logs
+.env*
+*.log
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
+# sandbox artifacts (not part of the app)
+download/
+tests/
+scripts/shot-*.png
+worklog.md
+.static-export-backup/
 
 # misc
 .DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-local-*
-.claude
-.z-ai-config
-*.log
-dev.log
-dev.out.log
-test
-prompt
-
-server.log
-# Skills directory
-/skills/
+ghpages/
+.gh-stage/
+skills/
+.zscripts/
