@@ -78,3 +78,26 @@ Work Log:
 
 Stage Summary:
 - ChatUltra live at https://gefrus112.github.io/chat-gpt/ with Claude Opus 5, real Claude connections (friendly https error handling), local accounts (avatar/bio/website), emoji-free icon UI, README with screenshots. Done.
+
+---
+Task ID: 6
+Agent: main (Super Z)
+Task: Make the interface like the user's reference screenshot (Codex/Jan-style model picker + icon rail + toolbar with mic) and add command running
+
+Work Log:
+- Studied reference image (search models, OPENAI/LOCAL AI groups, hover edit/link icons, "Add New Models Provider...", bottom toolbar w/ blue mic, slim icon rail)
+- models.ts: added "local" provider — Gemma 2B, Llama 3.1, Mistral Small with letter-tile icons; PROVIDER_URL for hover links
+- NEW src/lib/shell.ts: shared sandboxed ChatShell engine (ls/cd/cat/echo/touch/mkdir/rm/run/build/models/git/npm/node/python/ps/df/uname/neofetch/history, && chains, virtual fs, cwd, history, GitHub push handler)
+- model-picker.tsx: search bar, type-to-filter, hover actions (Pencil for custom, ExternalLink for providers), "Add New Models Provider..." row, local letter tiles
+- sidebar.tsx: replaced desktop 240px panel with 54px IconRail (logo, new chat, 4 views, history toggle, terminal, account, settings + tooltips) + HistoryFlyout panel; full panel kept for mobile drawer
+- chat-view.tsx: composer toolbar = model chip, SlidersHorizontal effort popover, Globe web toggle, SquareTerminal drawer toggle, Paperclip file attach, MoreHorizontal menu (new chat/export/push/account/settings), blue Mic (Web Speech API) that becomes blue Send; 18 slash commands w/ autocomplete popup + keyboard nav; command cards (kind:"command") with exit codes
+- NEW src/components/chat-terminal.tsx: dockable terminal drawer (Ctrl+`) using shared shell, colored output, history nav, clear/hide
+- markdown.tsx: bash/sh/shell/zsh/console code cards got green Run button -> runs via StudioContext.runCommand -> inline OUTPUT panel with dismiss
+- page.tsx: IconRail + HistoryFlyout wiring, terminalSignal for rail terminal button
+- Verified via agent-browser: rail, picker search+LOCAL AI, slash autocomplete, /run neofetch card (exit 0), terminal drawer (ls/git status), bash Run inline output, effort popover, AI streaming (Gemma 2B + Sonnet), playground, mobile 390px; lint clean, no console errors
+- Static export rebuilt; scripts/rebuild-gh-pages.sh (temp-repo plumbing, keeps parent); screenshots retaken (chat/models/commands/terminal) + README rewritten
+- Pushed main (69576e3, 97452ad) + gh-pages (d232e95) with user token via x-access-token remote; remote URL cleaned after each push; token never committed
+- Live verified: https://gefrus112.github.io/chat-gpt/ serves new UI; /run neofetch works on live site; CSS/JS assets 200
+
+Stage Summary:
+- ChatUltra now matches the reference Codex-style interface and runs commands in chat (slash cmds, bash Run cards, terminal drawer). Live on GitHub Pages. Done.
