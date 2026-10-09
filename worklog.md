@@ -56,3 +56,25 @@ Work Log:
 
 Stage Summary:
 - ChatUltra rebrand complete and verified; main + gh-pages ready to push; only missing: GitHub token for the actual push
+
+---
+Task ID: 5
+Agent: main (Super Z)
+Task: Emoji-free UI, Claude Opus 5 + real Claude connections, account creation, screenshots in README, push ChatUltra to gefrus112/chat-gpt as a live website
+
+Work Log:
+- models.ts: added Claude Opus 5 (flagship, badge "New"), replaced Opus 4.1; terminal `models` cmd + demo-ai model lists updated
+- NEW src/lib/claude-direct.ts: browser-direct Anthropic Messages API client with anthropic-dangerous-direct-browser-access header, model-id fallback chain (claude-opus-5 etc.), all failures mapped to friendly messages (no raw https/fetch errors)
+- NEW src/lib/account.ts + src/components/account-dialog.tsx: local account creation (hashed password), avatar upload via canvas compressImage, bio + website link editing, sign-in/sign-out; sidebar got a profile chip (avatar + username)
+- store.ts: connections.anthropicKey/anthropicOk; settings-dialog: new Connections tab with key field + Test connection; chat-view falls back: /api/chat -> real Claude (if key) -> demo brain, with friendly toasts
+- Emoji sweep: all emojis/symbols (game/web/brain/joystick, lightning, satellite, arrows, check/cross marks, play/pause glyphs) removed from every user-visible string and replaced with lucide icons or ASCII ([ok]/[err]); verified with unicode-range rg sweep = 0 matches
+- Static export rebuilt (scripts/static-export.sh, basePath /chat-gpt); lint clean in src/
+- Screenshots via agent-browser: docs/screenshots/{chat,models,playground,terminal,account,connections,chat-demo,live-site}.png; README rewritten with screenshot sections, no emojis
+- Git: committed main (5840994, de05aab, 3442010); force-pushed over remote "Initial commit" README stub; gh-pages rebuilt from out/ and pushed (93179c9)
+- Fixed critical deploy bug: cp out/* dropped .nojekyll -> Jekyll stripped _next/ -> site unstyled on Pages; restored .nojekyll, pushed, CSS 200
+- Pages: enabled (legacy branch mode, gh-pages root); workflow trigger switched to workflow_dispatch-only to avoid failed runs against legacy Pages
+- Verified live: https://gefrus112.github.io/chat-gpt/ (200, styled, browser screenshot clean, no page errors)
+- Token used only for push/API calls; never committed; remote URL cleaned after each push
+
+Stage Summary:
+- ChatUltra live at https://gefrus112.github.io/chat-gpt/ with Claude Opus 5, real Claude connections (friendly https error handling), local accounts (avatar/bio/website), emoji-free icon UI, README with screenshots. Done.
