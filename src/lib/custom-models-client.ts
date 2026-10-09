@@ -54,7 +54,7 @@ export async function createCustomModel(payload: Omit<CustomModelRecord, "id">):
     if (!res.ok) throw new Error(j.error || "failed");
     return j.model as CustomModelRecord;
   } catch (err) {
-    // static hosting → persist locally
+    // static hosting, persist locally
     if (err instanceof TypeError || err instanceof SyntaxError) {
       const rec: CustomModelRecord = { id: `ls-${Date.now().toString(36)}`, ...payload };
       lsWrite([...lsRead(), rec]);

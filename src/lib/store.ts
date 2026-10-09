@@ -19,11 +19,19 @@ export interface AppearanceSettings {
   monoMsg: boolean;
 }
 
+export interface ConnectionSettings {
+  /** Anthropic API key (sk-ant-...) — enables real Claude models straight from the browser */
+  anthropicKey: string;
+  anthropicOk: boolean;
+}
+
 interface SettingsState {
   gh: GitHubSettings;
   appearance: AppearanceSettings;
+  connections: ConnectionSettings;
   setGh: (g: Partial<GitHubSettings>) => void;
   setAppearance: (a: Partial<AppearanceSettings>) => void;
+  setConnections: (c: Partial<ConnectionSettings>) => void;
 }
 
 export const ACCENTS: { id: string; label: string; hex: string }[] = [
@@ -42,8 +50,10 @@ export const useSettings = create<SettingsState>()(
     (set) => ({
       gh: { token: "", repo: DEFAULT_REPO, branch: "main", connected: false },
       appearance: { accent: "#22d3ee", fontSize: "md", glow: true, compactSidebar: false, monoMsg: false },
+      connections: { anthropicKey: "", anthropicOk: false },
       setGh: (g) => set((s) => ({ gh: { ...s.gh, ...g } })),
       setAppearance: (a) => set((s) => ({ appearance: { ...s.appearance, ...a } })),
+      setConnections: (c) => set((s) => ({ connections: { ...s.connections, ...c } })),
     }),
     { name: "chatultra-settings" }
   )

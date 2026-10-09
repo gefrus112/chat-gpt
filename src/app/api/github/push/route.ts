@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const message = ((body.message ?? "Push from ChatUltra").toString() || "Push from ChatUltra").slice(0, 200);
     const files: { path: string; content: string }[] = Array.isArray(body.files) ? body.files : [];
 
-    if (!token) return NextResponse.json({ error: "GitHub token missing. Add one in Settings → GitHub." }, { status: 400 });
+    if (!token) return NextResponse.json({ error: "GitHub token missing. Add one in Settings > GitHub." }, { status: 400 });
     const repo = normalizeRepo(repoRaw);
     if (!repo) return NextResponse.json({ error: `Invalid repository: "${repoRaw}"` }, { status: 400 });
     if (!files.length) return NextResponse.json({ error: "No files to push" }, { status: 400 });

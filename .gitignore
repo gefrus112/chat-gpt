@@ -26,3 +26,7 @@ ghpages/
 .gh-stage/
 skills/
 .zscripts/
+
+# local preview helpers
+serve/
+.ghpages-wt/

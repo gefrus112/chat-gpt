@@ -53,19 +53,20 @@ export const BUILT_IN_MODELS: ModelDef[] = [
     flavor: "You behave like o4-mini: fast, lightweight, to the point.",
   },
   {
+    id: "claude-opus-5",
+    name: "Claude Opus 5",
+    provider: "anthropic",
+    tagline: "The most powerful Claude model",
+    badge: "New",
+    flavor: "You behave like Claude Opus 5 by Anthropic: the flagship, most powerful and nuanced Claude model. You reason with exceptional depth, care and precision, and excel at complex analysis, agentic coding and long-form thinking.",
+  },
+  {
     id: "claude-sonnet-4.5",
     name: "Claude Sonnet 4.5",
     provider: "anthropic",
     tagline: "Best coding model",
     badge: "Popular",
     flavor: "You behave like Claude Sonnet 4.5 by Anthropic: thoughtful, articulate, exceptional at code and long-form reasoning. Use natural, warm prose.",
-  },
-  {
-    id: "claude-opus-4.1",
-    name: "Claude Opus 4.1",
-    provider: "anthropic",
-    tagline: "Most powerful Claude",
-    flavor: "You behave like Claude Opus 4.1 by Anthropic: the most powerful, nuanced and careful Claude model, excellent for complex analysis.",
   },
   {
     id: "gemini-3-pro",

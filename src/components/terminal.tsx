@@ -96,9 +96,9 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
           ["> project@1.0.0 dev", "text-zinc-300"],
           ["> next dev --turbopack", "text-zinc-300"],
           ["", undefined],
-          ["  ▲ ChatUltra Dev  ready in 412 ms", "text-emerald-400"],
+          ["  ChatUltra Dev  ready in 412 ms", "text-emerald-400"],
           ["  - Local:  http://localhost:5173", "text-zinc-300"],
-          ["preview is live in the Play window →", "text-cyan-300"],
+          ["preview is live in the Play window", "text-cyan-300"],
         ]);
         break;
       case "build":
@@ -109,8 +109,8 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
           push(`  compiling  ${f.path}`, "text-zinc-400");
         }
         await new Promise((r) => setTimeout(r, 320));
-        push("✓ compiled successfully", "text-emerald-400");
-        push(`✓ bundle: ${(files.reduce((a, f) => a + f.content.length, 0) / 1024).toFixed(1)} kB total`, "text-emerald-400");
+        push("[ok] compiled successfully", "text-emerald-400");
+        push(`[ok] bundle: ${(files.reduce((a, f) => a + f.content.length, 0) / 1024).toFixed(1)} kB total`, "text-emerald-400");
         setBusy(false);
         break;
       case "git": {
@@ -120,20 +120,20 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
           push(`Remote repo: ${gh.repo || "(not configured)"}`, "text-zinc-400");
           push(`Changes to commit: ${files.length} file(s)`, "text-cyan-300");
           files.forEach((f) => push(`        modified:   ${f.path}`, "text-rose-300"));
-          push(gh.token ? "token: loaded from Settings ✓" : "token: MISSING — set it in Settings → GitHub", gh.token ? "text-emerald-400" : "text-amber-400");
+          push(gh.token ? "token: loaded from Settings" : "token: MISSING — set it in Settings > GitHub", gh.token ? "text-emerald-400" : "text-amber-400");
         } else if (sub === "log") {
           push("f3a9c21 (HEAD -> main) feat: latest ChatUltra build", "text-amber-300");
           push("8d21b04 chore: project scaffold", "text-amber-300");
         } else if (sub === "push") {
           if (!gh.token) {
-            push("fatal: no GitHub token — open Settings → GitHub, paste a token, then retry", "text-rose-400");
+            push("fatal: no GitHub token — open Settings > GitHub, paste a token, then retry", "text-rose-400");
             break;
           }
           setBusy(true);
           push(`Enumerating objects: ${files.length * 4}, done.`, "text-zinc-500");
           push(`Pushing to https://github.com/${gh.repo}`, "text-zinc-400");
           const res = await onPushToGithub();
-          push(res, res.includes("✓") ? "text-emerald-400" : "text-rose-400");
+          push(res, res.includes("[ok]") ? "text-emerald-400" : "text-rose-400");
           setBusy(false);
         } else {
           push(`git: '${sub || ""}' is not a chatultra-shell command. try: git status | git log | git push`, "text-rose-400");
@@ -142,8 +142,8 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
       }
       case "models":
         push("active models:", "text-cyan-300");
-        ["GPT-5.2 (OpenAI)", "GPT-5.2 Codex (OpenAI)", "o4 Mini (OpenAI)", "Claude Sonnet 4.5 (Anthropic)", "Claude Opus 4.1 (Anthropic)", "Gemini 3 Pro (Google)", "Gemini 2.5 Flash (Google)", "Luna 1 (ChatUltra)"].forEach((m) =>
-          push(`  ● ${m}`, "text-zinc-300")
+        ["GPT-5.2 (OpenAI)", "GPT-5.2 Codex (OpenAI)", "o4 Mini (OpenAI)", "Claude Opus 5 (Anthropic)", "Claude Sonnet 4.5 (Anthropic)", "Gemini 3 Pro (Google)", "Gemini 2.5 Flash (Google)", "Luna 1 (ChatUltra)"].forEach((m) =>
+          push(`  - ${m}`, "text-zinc-300")
         );
         break;
       case "echo":
@@ -224,7 +224,7 @@ export function Terminal({ files, projectName, onPushToGithub, className }: Term
           <i className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
         </span>
         <span className="font-mono text-[11px] text-zinc-500">chatultra-shell — {projectName}</span>
-        {busy && <span className="ml-auto animate-pulse font-mono text-[10px] text-amber-400">● busy</span>}
+        {busy && <span className="ml-auto animate-pulse font-mono text-[10px] text-amber-400">busy</span>}
       </div>
       <div ref={scrollRef} className="chatultra-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-[12px] leading-[1.55]">
         {lines.map((l) => (

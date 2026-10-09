@@ -16,13 +16,15 @@ import { ACCENTS, DEFAULT_REPO, useSettings, normalizeRepo } from "@/lib/store";
 import { BUILT_IN_MODELS } from "@/lib/models";
 import { listCustomModels, createCustomModel, deleteCustomModel } from "@/lib/custom-models-client";
 import { ghTestConnection } from "@/lib/gh-direct";
+import { callClaude, looksLikeAnthropicKey } from "@/lib/claude-direct";
+import { compressImage } from "@/lib/account";
 import { GitHubIcon } from "@/components/brand-icons";
 import { Loader2, Plus, Trash2, Upload, CheckCircle2, XCircle, Bot } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { asset } from "@/lib/asset";
 import { cn } from "@/lib/utils";
 
-export type SettingsTab = "appearance" | "github" | "models" | "about";
+export type SettingsTab = "appearance" | "connections" | "github" | "models" | "about";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -42,36 +44,18 @@ interface CustomModel {
   tagline: string;
 }
 
-async function compressImage(file: File): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-  return new Promise((resolve) => {
-    const img = new window.Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const size = 128;
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return resolve(dataUrl);
-      const min = Math.min(img.width, img.height);
-      ctx.drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, size, size);
-      resolve(canvas.toDataURL("image/png"));
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
-  });
-}
-
 export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsChanged }: SettingsDialogProps) {
   const gh = useSettings((s) => s.gh);
   const setGh = useSettings((s) => s.setGh);
   const appearance = useSettings((s) => s.appearance);
   const setAppearance = useSettings((s) => s.setAppearance);
+  const connections = useSettings((s) => s.connections);
+  const setConnections = useSettings((s) => s.setConnections);
+
+  // Anthropic / Claude connection form
+  const [clKey, setClKey] = useState("");
+  const [clTesting, setClTesting] = useState(false);
+  const [clResult, setClResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -95,7 +79,10 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
     if (open) {
       loadCustom();
       setTestResult(null);
+      setClKey(connections.anthropicKey);
+      setClResult(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tab]);
 
   const testConnection = async () => {
@@ -113,7 +100,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
         j = await res.json();
       } catch (e) {
         if (e instanceof TypeError) {
-          // static hosting → verify token+repo straight from the browser
+          // static hosting, verify token+repo straight from the browser
           j = await ghTestConnection(gh.token, gh.repo);
         } else {
           throw e;
@@ -121,7 +108,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
       }
       if (j.ok) {
         setGh({ connected: true });
-        setTestResult({ ok: true, msg: `Connected as ${j.login} → ${j.full_name} (${j.default_branch}${j.canPush ? ", push allowed" : ", READ ONLY"})` });
+        setTestResult({ ok: true, msg: `Connected as ${j.login} on ${j.full_name} (${j.default_branch}${j.canPush ? ", push allowed" : ", READ ONLY"})` });
       } else {
         setGh({ connected: false });
         setTestResult({ ok: false, msg: j.error ?? "connection failed" });
@@ -133,6 +120,29 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
     }
   };
 
+  const testClaude = async () => {
+    const key = clKey.trim();
+    if (!looksLikeAnthropicKey(key)) {
+      setConnections({ anthropicKey: key, anthropicOk: false });
+      setClResult({ ok: false, msg: "Anthropic keys start with sk-ant- — that one does not look right." });
+      return;
+    }
+    setClTesting(true);
+    setClResult(null);
+    try {
+      const r = await callClaude(key, [{ role: "user", content: "Reply with exactly: OK" }], undefined, 16);
+      if (r.ok) {
+        setConnections({ anthropicKey: key, anthropicOk: true });
+        setClResult({ ok: true, msg: `Claude is live via ${r.modelId ?? "api"} — Opus 5 and Sonnet 4.5 now answer for real.` });
+      } else {
+        setConnections({ anthropicKey: key, anthropicOk: false });
+        setClResult({ ok: false, msg: r.error ?? "connection failed" });
+      }
+    } finally {
+      setClTesting(false);
+    }
+  };
+
   const createModel = async () => {
     if (!name.trim()) {
       toast({ title: "Give your model a name first" });
@@ -141,7 +151,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
     setCreating(true);
     try {
       await createCustomModel({ name: name.trim(), tagline, baseModel, systemPrompt, accent, avatar });
-      toast({ title: `${name} is live ⚡`, description: "It now appears in your model picker." });
+      toast({ title: `${name} is live`, description: "It now appears in your model picker." });
       setName("");
       setTagline("");
       setSystemPrompt("");
@@ -178,6 +188,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
           <div className="px-5 pt-3">
             <TabsList className="bg-white/[0.04]">
               <TabsTrigger value="appearance">Appearance</TabsTrigger>
+              <TabsTrigger value="connections">Connections</TabsTrigger>
               <TabsTrigger value="models">My models</TabsTrigger>
               <TabsTrigger value="github" className="gap-1.5">
                 <GitHubIcon className="h-3 w-3" /> GitHub
@@ -243,6 +254,48 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-[12px] text-zinc-400">
                 Theme: <span className="text-cyan-300">Dark</span> (always) — ChatUltra is designed dark-first, like Codex. Accent preview:{" "}
                 <span className="font-mono" style={{ color: appearance.accent }}>{appearance.accent}</span>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* CONNECTIONS */}
+          <TabsContent value="connections" className="chatultra-scroll m-0 overflow-y-auto px-5 py-4">
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#d97757]/15 font-mono text-[11px] font-bold text-[#e8a287]">C</span>
+                <div className="text-[12px] leading-relaxed text-zinc-400">
+                  Connect <span className="text-zinc-200">Claude</span> with an Anthropic API key and <span className="text-zinc-200">Claude Opus 5</span> / Claude Sonnet 4.5 answer for real — straight from your browser. The key is stored only on this device, and connection errors are handled gracefully (no more cryptic HTTPS failures).
+                </div>
+              </div>
+              <div>
+                <Label className="text-[12.5px] text-zinc-300">Anthropic API key</Label>
+                <Input
+                  type="password"
+                  placeholder="sk-ant-api03-..."
+                  value={clKey}
+                  onChange={(e) => setClKey(e.target.value)}
+                  className="mt-1.5 border-white/10 bg-white/[0.04] font-mono text-[12px]"
+                />
+                <p className="mt-1 text-[10.5px] text-zinc-600">Create one at console.anthropic.com, under API keys.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button onClick={testClaude} disabled={clTesting || !clKey.trim()} className="h-8 gap-1.5 bg-[#d97757]/15 text-[12px] text-[#f0b39d] hover:bg-[#d97757]/25">
+                  {clTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Test connection
+                </Button>
+                {clResult && (
+                  <span className={cn("flex items-center gap-1 text-[11.5px]", clResult.ok ? "text-emerald-300" : "text-rose-300")}>
+                    {clResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                    {clResult.msg}
+                  </span>
+                )}
+              </div>
+              {connections.anthropicOk && (
+                <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2 text-[12px] text-emerald-200">
+                  Claude connected — pick <span className="font-mono">Claude Opus 5</span> in the model picker and chat for real.
+                </div>
+              )}
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-[11.5px] leading-relaxed text-zinc-500">
+                <span className="text-zinc-300">How it works:</span> on the static GitHub Pages site, ChatUltra calls the Anthropic Messages API directly from your browser with the direct-browser-access header. Without a key (or if the request is blocked), the built-in demo engine takes over so the app never breaks.
               </div>
             </div>
           </TabsContent>
@@ -400,7 +453,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
               </div>
               {gh.connected && (
                 <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2 text-[12px] text-emerald-200">
-                  Connected ✓ — Playground pushes will go to <span className="font-mono">{gh.repo}</span> @{gh.branch || "main"}
+                  Connected — Playground pushes will go to <span className="font-mono">{gh.repo}</span> @{gh.branch || "main"}
                 </div>
               )}
             </div>
@@ -414,8 +467,8 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
               <p className="mt-1 text-[12px] text-zinc-500">v1.4.0 · Codex-grade AI workspace</p>
               <div className="mt-4 grid w-full max-w-sm grid-cols-2 gap-2 text-left text-[12px]">
                 {[
-                  ["Models", "8 built-in + your customs"],
-                  ["Effort levels", "Low → Ultra (6)"],
+                  ["Models", "9 built-in + your customs"],
+                  ["Effort levels", "Low to Ultra (6)"],
                   ["Playground", "Game builder + popout editor"],
                   ["Terminal", "chatultra-shell (Linux-style)"],
                   ["Canvas", "HTML live preview + Run"],

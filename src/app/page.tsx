@@ -7,6 +7,7 @@ import { Playground } from "@/components/playground";
 import { AgentView } from "@/components/agent-view";
 import { VideoView } from "@/components/video-view";
 import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
+import { AccountDialog } from "@/components/account-dialog";
 import { BUILT_IN_MODELS, customToModelDef, type EffortDef, type ModelDef } from "@/lib/models";
 import { useSettings } from "@/lib/store";
 import { useCustomModels } from "@/components/model-picker";
@@ -21,6 +22,7 @@ export default function Home() {
   const [effort, setEffort] = useState("high");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("appearance");
+  const [accountOpen, setAccountOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const appearance = useSettings((s) => s.appearance);
@@ -62,6 +64,7 @@ export default function Home() {
           onSelectConversation={setConversationId}
           refreshKey={historyKey}
           onOpenSettings={() => openSettings("appearance")}
+          onOpenAccount={() => setAccountOpen(true)}
         />
       </div>
 
@@ -85,6 +88,7 @@ export default function Home() {
             }}
             refreshKey={historyKey}
             onOpenSettings={() => openSettings("appearance")}
+            onOpenAccount={() => setAccountOpen(true)}
           />
         </div>
       </div>
@@ -119,6 +123,8 @@ export default function Home() {
         onTab={setSettingsTab}
         onCustomModelsChanged={() => setCustomKey((k) => k + 1)}
       />
+
+      <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
     </main>
   );
 }

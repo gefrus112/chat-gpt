@@ -67,7 +67,7 @@ export function VideoView() {
       setFrames(j.frames ?? []);
       setProgressText(`Done — ${j.frames.length} frames`);
       setPlaying(true);
-      toast({ title: "AI video ready 🎬", description: `${j.frames.length} frames · ${style}` });
+      toast({ title: "AI video ready", description: `${j.frames.length} frames · ${style}` });
     } catch (err) {
       setProgressText("");
       toast({ title: "Video generation failed", description: err instanceof Error ? err.message : "try again" });
@@ -81,7 +81,7 @@ export function VideoView() {
     const payload = JSON.stringify(frames.map((f) => `data:image/png;base64,${f.base64}`));
     const w = window.open("", "_blank", "noopener,width=1200,height=700");
     if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><title>ChatUltra AI Video</title><style>body{margin:0;background:#05070d;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:monospace;color:#22d3ee}img{max-width:92%;max-height:82%;border-radius:12px;box-shadow:0 0 60px rgba(34,211,238,.25)}button{margin-top:14px;background:#22d3ee22;border:1px solid #22d3ee55;color:#a5f3fc;padding:8px 20px;border-radius:8px;cursor:pointer}</style></head><body><img id="f"><button id="b">⏸ Pause</button><script>var fr=${payload};var i=0;var on=true;setInterval(function(){if(on){document.getElementById('f').src=fr[i];i=(i+1)%fr.length}},900);document.getElementById('b').onclick=function(){on=!on;this.textContent=on?'⏸ Pause':'▶ Play'};document.getElementById('f').src=fr[0]</script></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><title>ChatUltra AI Video</title><style>body{margin:0;background:#05070d;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:monospace;color:#22d3ee}img{max-width:92%;max-height:82%;border-radius:12px;box-shadow:0 0 60px rgba(34,211,238,.25)}button{margin-top:14px;background:#22d3ee22;border:1px solid #22d3ee55;color:#a5f3fc;padding:8px 20px;border-radius:8px;cursor:pointer}</style></head><body><img id="f"><button id="b">Pause</button><script>var fr=${payload};var i=0;var on=true;setInterval(function(){if(on){document.getElementById('f').src=fr[i];i=(i+1)%fr.length}},900);document.getElementById('b').onclick=function(){on=!on;this.textContent=on?'Pause':'Play'};document.getElementById('f').src=fr[0]</script></body></html>`);
     w.document.close();
   };
 

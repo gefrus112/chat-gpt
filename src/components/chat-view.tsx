@@ -2,13 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ArrowUp, Loader2, Square, Wrench } from "lucide-react";
+import { ArrowUp, Loader2, Square, Wrench, Gamepad2, Globe, Brain, Joystick } from "lucide-react";
 import { Markdown, StudioContext } from "@/components/markdown";
 import { ModelPicker, ModelIcon } from "@/components/model-picker";
 import { PreviewPanel } from "@/components/preview-panel";
+import type { SettingsTab } from "@/components/settings-dialog";
 import { findEffort, type EffortDef, type ModelDef } from "@/lib/models";
 import { demoReply, streamDemoReply } from "@/lib/demo-ai";
+import { callClaude } from "@/lib/claude-direct";
+import { useSettings } from "@/lib/store";
 import { asset } from "@/lib/asset";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 export interface ChatMessage {
@@ -28,14 +32,14 @@ interface ChatViewProps {
   onModel: (id: string) => void;
   onEffort: (id: EffortDef["id"]) => void;
   onConversationCreated: (id: string) => void;
-  onOpenSettings: (tab?: "appearance" | "github" | "models" | "about") => void;
+  onOpenSettings: (tab?: SettingsTab) => void;
 }
 
-const SUGGESTIONS = [
-  { icon: "🎮", title: "Build a game", prompt: "Build a complete playable neon arcade game — a wave-based space shooter with powerups, score and restart. Give me the full single-file HTML." },
-  { icon: "🌐", title: "Create a website", prompt: "Create a stunning dark-themed portfolio website for a game developer, single-file HTML with smooth animations and a hero section." },
-  { icon: "🧠", title: "Explain anything", prompt: "Explain how neural networks learn, with a small interactive HTML visualization I can play with." },
-  { icon: "🕹️", title: "Remix a classic", prompt: "Build a complete single-file HTML snake game with neon glow, wrap-around walls, increasing speed and a high-score counter." },
+const SUGGESTIONS: { icon: React.ReactNode; title: string; prompt: string }[] = [
+  { icon: <Gamepad2 className="h-4 w-4 text-cyan-300" />, title: "Build a game", prompt: "Build a complete playable neon arcade game — a wave-based space shooter with powerups, score and restart. Give me the full single-file HTML." },
+  { icon: <Globe className="h-4 w-4 text-violet-300" />, title: "Create a website", prompt: "Create a stunning dark-themed portfolio website for a game developer, single-file HTML with smooth animations and a hero section." },
+  { icon: <Brain className="h-4 w-4 text-amber-300" />, title: "Explain anything", prompt: "Explain how neural networks learn, with a small interactive HTML visualization I can play with." },
+  { icon: <Joystick className="h-4 w-4 text-rose-300" />, title: "Remix a classic", prompt: "Build a complete single-file HTML snake game with neon glow, wrap-around walls, increasing speed and a high-score counter." },
 ];
 
 export function ChatView({ models, model, effort, conversationId, onModel, onEffort, onConversationCreated, onOpenSettings }: ChatViewProps) {
@@ -150,18 +154,56 @@ export function ChatView({ models, model, effort, conversationId, onModel, onEff
     } catch (err) {
       const aborted = err instanceof DOMException && err.name === "AbortError";
       if (!aborted && !gotDelta) {
-        // static hosting (e.g. GitHub Pages) → no backend; stream the built-in demo brain instead
-        const reply = demoReply(msg);
-        await streamDemoReply(
-          reply,
-          (text) => setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: text } : x))),
-          ctrl.signal
-        );
+        // static hosting (e.g. GitHub Pages) has no backend — pick the best brain:
+        // 1) real Claude via the Anthropic API when the model + key are available
+        // 2) built-in demo brain otherwise
+        const provider = currentModel?.provider;
+        const anthropicKey = useSettings.getState().connections.anthropicKey;
+        if (provider === "anthropic" && anthropicKey) {
+          const sys =
+            `You are ${currentModel?.name ?? "Claude"}, running inside ChatUltra, a dark Codex-style AI studio. ` +
+            "Answer in Markdown, always wrap code in fenced blocks with a language tag, and for any web page, game or UI request " +
+            "produce a COMPLETE single-file HTML document (inline CSS/JS) inside one ```html block. " +
+            `Effort level: ${eff.label}. ${eff.directive}`;
+          const turns = [
+            ...messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+            { role: "user" as const, content: msg },
+          ];
+          const r = await callClaude(anthropicKey, turns, sys, 4096);
+          if (r.ok && r.text) {
+            await streamDemoReply(
+              r.text,
+              (text) => setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: text } : x))),
+              ctrl.signal
+            );
+          } else {
+            toast({ title: "Claude call failed — switched to the local engine", description: r.error });
+            const reply = demoReply(msg);
+            await streamDemoReply(
+              reply,
+              (text) => setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: text } : x))),
+              ctrl.signal
+            );
+          }
+        } else {
+          if (provider === "anthropic" && !anthropicKey) {
+            toast({
+              title: "Demo engine",
+              description: `Paste an Anthropic API key in Settings > Connections to chat with ${currentModel?.name} for real.`,
+            });
+          }
+          const reply = demoReply(msg);
+          await streamDemoReply(
+            reply,
+            (text) => setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: text } : x))),
+            ctrl.signal
+          );
+        }
       } else {
         setMessages((m) =>
           m.map((x) =>
             x.id === aiId
-              ? { ...x, content: x.content || (aborted ? "_stopped._" : `⚠️ ${err instanceof Error ? err.message : "Something went wrong — try again."}`) }
+              ? { ...x, content: x.content || (aborted ? "_stopped._" : `Error: ${err instanceof Error ? err.message : "Something went wrong — try again."}`) }
               : x
           )
         );

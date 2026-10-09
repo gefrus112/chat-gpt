@@ -106,7 +106,7 @@ export function AgentView() {
       } catch {
         setResults((r) => {
           const next = [...r];
-          next[i] = { title: step.title, output: step.output, result: "⚠️ step failed — continuing", done: true };
+          next[i] = { title: step.title, output: step.output, result: "step failed — continuing", done: true };
           return next;
         });
       }

@@ -72,9 +72,9 @@ export function demoReply(prompt: string): string {
 
   if (/(hi|hello|hey|who are you|what can you do|help|about)/.test(p)) {
     return (
-      "**Hey — I'm the ChatUltra demo assistant.** ⚡\n\n" +
+      "**Hey — I'm the ChatUltra demo assistant.**\n\n" +
       "You're viewing the static edition of **ChatUltra**, so responses come from a built-in demo brain instead of the live model API. Everything else works exactly like the real studio:\n\n" +
-      "- **Live HTML preview** — ask me for a game or site below, then press *Run* on the code card\n- **Model picker** — GPT-5.2, Claude Sonnet 4.5, Gemini 3 Pro, Luna + your own custom models\n- **Effort dial** — Low → Ultra reasoning bars\n- **Playground** — 7 game templates, external editor window, chatultra-shell terminal\n- **GitHub push** — add your token in Settings → GitHub and push projects straight to *gefrus112/chat-gpt*\n\n" +
+      "- **Live HTML preview** — ask me for a game or site below, then press *Run* on the code card\n- **Model picker** — GPT-5.2, Claude Opus 5, Claude Sonnet 4.5, Gemini 3 Pro, Luna + your own custom models\n- **Effort dial** — Low to Ultra reasoning bars\n- **Playground** — 7 game templates, external editor window, chatultra-shell terminal\n- **GitHub push** — add your token in Settings > GitHub and push projects straight to *gefrus112/chat-gpt*\n\n" +
       "Try: *\"build a snake game\"* or *\"create a dark portfolio website\"*."
     );
   }

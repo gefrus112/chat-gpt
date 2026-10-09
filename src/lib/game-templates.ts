@@ -23,7 +23,7 @@ const PONG = `<!DOCTYPE html>
 </style>
 </head>
 <body>
-<div class="hud">NEON PONG — W/S or ↑/↓ — first to 5</div>
+<div class="hud">NEON PONG — W/S or Up/Down — first to 5</div>
 <canvas id="c" width="800" height="480"></canvas>
 <script>
 var c=document.getElementById('c'),x=c.getContext('2d');
@@ -172,7 +172,7 @@ const SHOOTER = `<!DOCTYPE html>
 </style>
 </head>
 <body>
-<div>SPACE BLASTER — ←/→ move · SPACE fire — score <span id="s">0</span></div>
+<div>SPACE BLASTER — Left/Right move · SPACE fire — score <span id="s">0</span></div>
 <canvas id="c" width="560" height="620"></canvas>
 <script>
 var c=document.getElementById('c'),x=c.getContext('2d');
@@ -300,9 +300,9 @@ const CLICKER = `<!DOCTYPE html>
 <div>
   <h1 style="visibility:hidden">.</h1>
   <div class="shop">
-    <button class="buy" id="b1">⚡ Amplifier (+1/click) — <span id="c1">15</span><small>more energy per tap</small></button>
-    <button class="buy" id="b2">🛰 Drone (+1/sec) — <span id="c2">50</span><small>auto energy</small></button>
-    <button class="buy" id="b3">🌌 Reactor (+5/sec) — <span id="c3">400</span><small>big auto energy</small></button>
+    <button class="buy" id="b1">Amplifier (+1/click) — <span id="c1">15</span><small>more energy per tap</small></button>
+    <button class="buy" id="b2">Drone (+1/sec) — <span id="c2">50</span><small>auto energy</small></button>
+    <button class="buy" id="b3">Reactor (+5/sec) — <span id="c3">400</span><small>big auto energy</small></button>
   </div>
 </div>
 <script>

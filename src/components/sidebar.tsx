@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { MessageSquarePlus, MessageSquare, Boxes, Bot, Clapperboard, Settings, Trash2, X, Pin } from "lucide-react";
+import { MessageSquarePlus, MessageSquare, Boxes, Bot, Clapperboard, Settings, Trash2, X, Pin, CircleUserRound } from "lucide-react";
 import { GitHubIcon } from "@/components/brand-icons";
 import { useSettings } from "@/lib/store";
+import { useAccount } from "@/lib/account";
 import { asset } from "@/lib/asset";
 import { cn } from "@/lib/utils";
 
@@ -25,11 +26,13 @@ interface SidebarProps {
   onSelectConversation: (id: string | null) => void;
   refreshKey: number;
   onOpenSettings: () => void;
+  onOpenAccount: () => void;
 }
 
-export function Sidebar({ view, onView, conversationId, onSelectConversation, refreshKey, onOpenSettings }: SidebarProps) {
+export function Sidebar({ view, onView, conversationId, onSelectConversation, refreshKey, onOpenSettings, onOpenAccount }: SidebarProps) {
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const gh = useSettings((s) => s.gh);
+  const account = useAccount((s) => s.account);
 
   const load = () => {
     fetch("/api/conversations")
@@ -133,6 +136,20 @@ export function Sidebar({ view, onView, conversationId, onSelectConversation, re
 
       {/* bottom */}
       <div className="space-y-0.5 border-t border-white/[0.07] p-3">
+        <button
+          onClick={onOpenAccount}
+          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-zinc-200 transition hover:bg-white/[0.05]"
+        >
+          {account?.avatar ? (
+            <Image src={account.avatar} alt={account.username} width={26} height={26} className="h-[26px] w-[26px] rounded-lg border border-white/10 object-cover" unoptimized />
+          ) : (
+            <span className="flex h-[26px] w-[26px] items-center justify-center rounded-lg border border-white/10 bg-white/[0.05]">
+              <CircleUserRound className="h-4 w-4 text-zinc-400" />
+            </span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-left">{account ? account.username : "Create account"}</span>
+          <span className="rounded-full border border-white/10 px-1.5 py-0.5 text-[9px] text-zinc-500">{account ? "profile" : "new"}</span>
+        </button>
         <button
           onClick={onOpenSettings}
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-zinc-300 transition hover:bg-white/[0.05]"

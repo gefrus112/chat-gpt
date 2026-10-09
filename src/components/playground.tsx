@@ -40,7 +40,7 @@ function buildPopoutDoc(code: string): string {
   .col{display:flex;flex-direction:column;flex:1;min-width:0}
   .label{padding:5px 12px;font-size:10px;letter-spacing:2px;color:#64748b;background:#0a0e18;border-bottom:1px solid #1e293b}
   </style></head><body>
-  <header><b>ChatUltra</b> external game editor <span class="spacer"></span><span style="font-size:11px;color:#64748b">edits here sync back to the studio</span><button id="sync">⇦ Send changes to Studio</button><button id="run">▶ Run</button></header>
+  <header><b>ChatUltra</b> external game editor <span class="spacer"></span><span style="font-size:11px;color:#64748b">edits here sync back to the studio</span><button id="sync">Send changes to Studio</button><button id="run">Run</button></header>
   <main>
     <div class="col"><div class="label">EDITOR</div><textarea id="ed" spellcheck="false"></textarea></div>
     <div class="col"><div class="label">LIVE PREVIEW</div><iframe id="pv" sandbox="allow-scripts allow-modals allow-pointer-lock"></iframe></div>
@@ -51,7 +51,7 @@ function buildPopoutDoc(code: string): string {
   ed.value=seed;pv.srcdoc=seed;
   document.getElementById('run').onclick=function(){pv.srcdoc=ed.value};
   document.getElementById('sync').onclick=function(){
-    try{window.opener.postMessage({type:'chatultra-code-sync',code:ed.value},'*');this.textContent='✓ sent';var b=this;setTimeout(function(){b.textContent='⇦ Send changes to Studio'},1200)}catch(e){alert('lost connection to studio')}
+    try{window.opener.postMessage({type:'chatultra-code-sync',code:ed.value},'*');this.textContent='sent';var b=this;setTimeout(function(){b.textContent='Send changes to Studio'},1200)}catch(e){alert('lost connection to studio')}
   };
   </script></body></html>`;
 }
@@ -130,7 +130,7 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
       const text = await res.text();
       let md = text;
       try {
-        // ndjson stream → collect deltas
+        // ndjson stream, collect deltas
         md = text
           .split("\n")
           .filter(Boolean)
@@ -152,12 +152,12 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
         setProjectName(prompt.slice(0, 30) || "AI Game");
         setActiveTemplate("ai");
         setPreviewNonce((n) => n + 1);
-        toast({ title: "Game built ⚡", description: "Your AI-generated game is live in the preview." });
+        toast({ title: "Game built", description: "Your AI-generated game is live in the preview." });
       } else {
         toast({ title: "Could not parse game HTML", description: "Try rephrasing the prompt." });
       }
     } catch {
-      // static hosting (e.g. GitHub Pages) → fall back to the built-in demo brain
+      // static hosting (e.g. GitHub Pages), fall back to the built-in demo brain
       const demo = demoReply(`Build a game: ${prompt}`);
       const demoHtml = extractHtml(demo);
       if (demoHtml) {
@@ -165,7 +165,7 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
         setProjectName(prompt.slice(0, 30) || "AI Game");
         setActiveTemplate("ai");
         setPreviewNonce((n) => n + 1);
-        toast({ title: "Demo game loaded ⚡", description: "Static demo mode — replace via the full ChatUltra server." });
+        toast({ title: "Demo game loaded", description: "Static demo mode — replace via the full ChatUltra server." });
       } else {
         toast({ title: "Build failed", description: "The AI service did not respond. Try again." });
       }
@@ -175,9 +175,9 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
   };
 
   const pushToGithub = async (): Promise<string> => {
-    if (!gh.token) return "✗ no token — open Settings → GitHub";
+    if (!gh.token) return "[err] no token — open Settings > GitHub";
     const repo = normalizeRepo(gh.repo);
-    if (!repo) return "✗ invalid repo in Settings";
+    if (!repo) return "[err] invalid repo in Settings";
     setPushing(true);
     const payload = {
       token: gh.token,
@@ -206,20 +206,20 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
         const r = await ghPushFiles(payload);
         if (r.ok) {
           toast({ title: "Pushed to GitHub", description: `${payload.repo} · ${payload.branch} · ${payload.files.length} files` });
-          return `✓ pushed ${payload.files.length} files to ${payload.repo}@${payload.branch}`;
+          return `[ok] pushed ${payload.files.length} files to ${payload.repo}@${payload.branch}`;
         }
         toast({ title: "Push failed", description: r.error ?? "unknown error" });
-        return `✗ ${r.error ?? "push failed"}`;
+        return `[err] ${r.error ?? "push failed"}`;
       }
       if (j.ok) {
         toast({ title: "Pushed to GitHub", description: `${j.repo} · ${j.branch} · ${j.pushed}/${j.total} files` });
-        return `✓ pushed ${j.pushed}/${j.total} files to ${j.repo}@${j.branch}`;
+        return `[ok] pushed ${j.pushed}/${j.total} files to ${j.repo}@${j.branch}`;
       }
       toast({ title: "Push failed", description: j.error ?? "unknown error" });
-      return `✗ ${j.error ?? "push failed"}`;
+      return `[err] ${j.error ?? "push failed"}`;
     } catch {
       toast({ title: "Push failed", description: "Network error" });
-      return "✗ network error";
+      return "[err] network error";
     } finally {
       setPushing(false);
     }
@@ -323,7 +323,7 @@ export function Playground({ refreshKey }: { refreshKey: number }) {
                 className="h-7 gap-1 bg-cyan-500/15 text-[11.5px] text-cyan-200 hover:bg-cyan-500/25"
                 onClick={() => setPreviewNonce((n) => n + 1)}
               >
-                ▶ Run
+                Run
               </Button>
             </div>
           </div>
