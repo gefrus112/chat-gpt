@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  title     String    @default("New Chat")
+  model     String    @default("gpt-5.2")
+  effort    String    @default("high")
+  pinned   Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  model          String?
+  effort         String?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model CustomModel {
+  id           String   @id @default(cuid())
+  name         String
+  avatar       String?  // base64 data URL of uploaded picture
+  baseModel    String   @default("gpt-5.2")
+  systemPrompt String   @default("")
+  accent       String   @default("#22d3ee")
+  tagline      String   @default("")
+  createdAt    DateTime @default(now())
+}
