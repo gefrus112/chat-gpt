@@ -23,6 +23,12 @@ export interface ConnectionSettings {
   /** Anthropic API key (sk-ant-...) — enables real Claude models straight from the browser */
   anthropicKey: string;
   anthropicOk: boolean;
+  /** OpenAI API key (sk-...) — real GPT models with live token streaming */
+  openaiKey: string;
+  openaiOk: boolean;
+  /** Google AI API key (AIza...) — real Gemini models with live streaming */
+  googleKey: string;
+  googleOk: boolean;
   /** ChatUltra backend server (backend/ folder) — real generation with API keys */
   backendUrl: string;
   backendKey: string;
@@ -73,6 +79,10 @@ export const useSettings = create<SettingsState>()(
       connections: {
         anthropicKey: "",
         anthropicOk: false,
+        openaiKey: "",
+        openaiOk: false,
+        googleKey: "",
+        googleOk: false,
         backendUrl: "",
         backendKey: "",
         backendOk: false,

@@ -17,6 +17,7 @@ import { BUILT_IN_MODELS } from "@/lib/models";
 import { listCustomModels, createCustomModel, deleteCustomModel } from "@/lib/custom-models-client";
 import { ghTestConnection } from "@/lib/gh-direct";
 import { callClaude, looksLikeAnthropicKey } from "@/lib/claude-direct";
+import { testOpenAIKey, testGoogleKey } from "@/lib/byok";
 import { compressImage } from "@/lib/account";
 import { backendHealth, testSupabase } from "@/lib/cloud";
 import { GitHubIcon, StripeIcon, SupabaseIcon, CloudflareIcon } from "@/components/brand-icons";
@@ -58,6 +59,16 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
   const [clTesting, setClTesting] = useState(false);
   const [clResult, setClResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  // OpenAI connection form
+  const [oaiKey, setOaiKey] = useState("");
+  const [oaiTesting, setOaiTesting] = useState(false);
+  const [oaiResult, setOaiResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // Google Gemini connection form
+  const [gKey, setGKey] = useState("");
+  const [gTesting, setGTesting] = useState(false);
+  const [gResult, setGResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
   // ChatUltra backend form
   const [bkUrl, setBkUrl] = useState("");
   const [bkKey, setBkKey] = useState("");
@@ -97,6 +108,10 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
       setTestResult(null);
       setClKey(connections.anthropicKey);
       setClResult(null);
+      setOaiKey(connections.openaiKey);
+      setOaiResult(null);
+      setGKey(connections.googleKey);
+      setGResult(null);
       setBkUrl(connections.backendUrl);
       setBkKey(connections.backendKey);
       setBkResult(null);
@@ -162,6 +177,30 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
       }
     } finally {
       setClTesting(false);
+    }
+  };
+
+  const testOpenAI = async () => {
+    setOaiTesting(true);
+    setOaiResult(null);
+    try {
+      const r = await testOpenAIKey(oaiKey);
+      setConnections({ openaiKey: oaiKey.trim(), openaiOk: r.ok });
+      setOaiResult(r);
+    } finally {
+      setOaiTesting(false);
+    }
+  };
+
+  const testGoogle = async () => {
+    setGTesting(true);
+    setGResult(null);
+    try {
+      const r = await testGoogleKey(gKey);
+      setConnections({ googleKey: gKey.trim(), googleOk: r.ok });
+      setGResult(r);
+    } finally {
+      setGTesting(false);
     }
   };
 
@@ -318,38 +357,95 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
           <TabsContent value="connections" className="chatultra-scroll m-0 overflow-y-auto px-5 py-4">
             <div className="space-y-4">
               <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#d97757]/15 font-mono text-[11px] font-bold text-[#e8a287]">C</span>
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-cyan-400/15 font-mono text-[11px] font-bold text-cyan-300">⚡</span>
                 <div className="text-[12px] leading-relaxed text-zinc-400">
-                  Connect <span className="text-zinc-200">Claude</span> with an Anthropic API key and <span className="text-zinc-200">Claude Opus 5</span> / Claude Sonnet 4.5 answer for real — straight from your browser. The key is stored only on this device, and connection errors are handled gracefully (no more cryptic HTTPS failures).
+                  <span className="text-zinc-200">Your keys = the real backend.</span> Paste an OpenAI, Anthropic or Google key and the matching models answer for real with live token streaming — straight from your browser. Keys are stored only on this device and are sent nowhere except the provider's own API.
                 </div>
               </div>
+
+              {/* ---- OpenAI ---- */}
               <div>
-                <Label className="text-[12.5px] text-zinc-300">Anthropic API key</Label>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md border border-emerald-400/25 bg-emerald-950/50 font-mono text-[11px] font-bold text-emerald-300">AI</span>
+                  <Label className="text-[12.5px] font-semibold text-zinc-200">OpenAI — GPT models</Label>
+                  {connections.openaiOk && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300">Live</span>}
+                </div>
+                <Input
+                  type="password"
+                  placeholder="sk-..."
+                  value={oaiKey}
+                  onChange={(e) => setOaiKey(e.target.value)}
+                  className="mt-2 border-white/10 bg-white/[0.04] font-mono text-[12px]"
+                />
+                <p className="mt-1 text-[10.5px] text-zinc-600">Create one at platform.openai.com, under API keys. Powers GPT-5.2, GPT-5.2 Codex and o4 Mini.</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button onClick={testOpenAI} disabled={oaiTesting || !oaiKey.trim()} className="h-8 gap-1.5 bg-emerald-500/15 text-[12px] text-emerald-200 hover:bg-emerald-500/25">
+                    {oaiTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Test connection
+                  </Button>
+                  {oaiResult && (
+                    <span className={cn("flex items-center gap-1 text-[11.5px]", oaiResult.ok ? "text-emerald-300" : "text-rose-300")}>
+                      {oaiResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                      {oaiResult.msg}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* ---- Anthropic ---- */}
+              <div className="border-t border-white/[0.07] pt-4">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md border border-[#d97757]/25 bg-[#d97757]/10 font-mono text-[11px] font-bold text-[#e8a287]">C</span>
+                  <Label className="text-[12.5px] font-semibold text-zinc-200">Anthropic — Claude models</Label>
+                  {connections.anthropicOk && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300">Live</span>}
+                </div>
                 <Input
                   type="password"
                   placeholder="sk-ant-api03-..."
                   value={clKey}
                   onChange={(e) => setClKey(e.target.value)}
-                  className="mt-1.5 border-white/10 bg-white/[0.04] font-mono text-[12px]"
+                  className="mt-2 border-white/10 bg-white/[0.04] font-mono text-[12px]"
                 />
-                <p className="mt-1 text-[10.5px] text-zinc-600">Create one at console.anthropic.com, under API keys.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button onClick={testClaude} disabled={clTesting || !clKey.trim()} className="h-8 gap-1.5 bg-[#d97757]/15 text-[12px] text-[#f0b39d] hover:bg-[#d97757]/25">
-                  {clTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Test connection
-                </Button>
-                {clResult && (
-                  <span className={cn("flex items-center gap-1 text-[11.5px]", clResult.ok ? "text-emerald-300" : "text-rose-300")}>
-                    {clResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-                    {clResult.msg}
-                  </span>
-                )}
-              </div>
-              {connections.anthropicOk && (
-                <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2 text-[12px] text-emerald-200">
-                  Claude connected — pick <span className="font-mono">Claude Opus 5.1</span> or <span className="font-mono">Claude Opus 5</span> in the model picker and chat for real.
+                <p className="mt-1 text-[10.5px] text-zinc-600">Create one at console.anthropic.com, under API keys. Powers Claude Opus 5.1, Opus 5 and Sonnet 4.5.</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button onClick={testClaude} disabled={clTesting || !clKey.trim()} className="h-8 gap-1.5 bg-[#d97757]/15 text-[12px] text-[#f0b39d] hover:bg-[#d97757]/25">
+                    {clTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Test connection
+                  </Button>
+                  {clResult && (
+                    <span className={cn("flex items-center gap-1 text-[11.5px]", clResult.ok ? "text-emerald-300" : "text-rose-300")}>
+                      {clResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                      {clResult.msg}
+                    </span>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* ---- Google Gemini ---- */}
+              <div className="border-t border-white/[0.07] pt-4">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md border border-sky-400/25 bg-sky-950/50 font-mono text-[11px] font-bold text-sky-300">G</span>
+                  <Label className="text-[12.5px] font-semibold text-zinc-200">Google — Gemini models</Label>
+                  {connections.googleOk && <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300">Live</span>}
+                </div>
+                <Input
+                  type="password"
+                  placeholder="AIza..."
+                  value={gKey}
+                  onChange={(e) => setGKey(e.target.value)}
+                  className="mt-2 border-white/10 bg-white/[0.04] font-mono text-[12px]"
+                />
+                <p className="mt-1 text-[10.5px] text-zinc-600">Create one at aistudio.google.com, under Get API key. Powers Gemini 3 Pro and Gemini 2.5 Flash.</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button onClick={testGoogle} disabled={gTesting || !gKey.trim()} className="h-8 gap-1.5 bg-sky-500/15 text-[12px] text-sky-200 hover:bg-sky-500/25">
+                    {gTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Test connection
+                  </Button>
+                  {gResult && (
+                    <span className={cn("flex items-center gap-1 text-[11.5px]", gResult.ok ? "text-emerald-300" : "text-rose-300")}>
+                      {gResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                      {gResult.msg}
+                    </span>
+                  )}
+                </div>
+              </div>
 
               {/* ---- ChatUltra backend ---- */}
               <div className="border-t border-white/[0.07] pt-4">
@@ -427,7 +523,7 @@ export function SettingsDialog({ open, onOpenChange, tab, onTab, onCustomModelsC
               </div>
 
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-[11.5px] leading-relaxed text-zinc-500">
-                <span className="text-zinc-300">How it works:</span> on the static GitHub Pages site, ChatUltra calls the Anthropic Messages API directly from your browser with the direct-browser-access header. Without a key (or if the request is blocked), the built-in demo engine takes over so the app never breaks.
+                <span className="text-zinc-300">How it works:</span> with a key saved, ChatUltra streams the real model straight from your browser (OpenAI, Anthropic and Google all allow direct browser calls). Without a key, the app tries the ChatUltra backend connector, then the built-in engine — so it never breaks. Prefer to run a server? Point <span className="font-mono text-zinc-400">backend/</span> at any host and use it instead.
               </div>
             </div>
           </TabsContent>

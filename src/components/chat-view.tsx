@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   ArrowUp,
+  ArrowUpRight,
   Loader2,
   Square,
   Gamepad2,
@@ -23,6 +24,11 @@ import {
   TerminalSquare,
   Clapperboard,
   Zap,
+  Copy,
+  Check,
+  RefreshCw,
+  KeyRound,
+  Cpu,
 } from "lucide-react";
 import { Markdown, StudioContext } from "@/components/markdown";
 import { ModelPicker, EffortBars } from "@/components/model-picker";
@@ -33,6 +39,7 @@ import type { SettingsTab } from "@/components/settings-dialog";
 import { findEffort, EFFORTS, PROVIDER_LABEL, type EffortDef, type ModelDef } from "@/lib/models";
 import { demoReply, streamDemoReply, demoVideoCard } from "@/lib/demo-ai";
 import { callClaude } from "@/lib/claude-direct";
+import { streamByok, byokProviderFor } from "@/lib/byok";
 import { useSettings, ACCENTS } from "@/lib/store";
 import { backendGenerate } from "@/lib/cloud";
 import { charge } from "@/lib/credits";
@@ -89,11 +96,13 @@ interface ChatViewProps {
   onNewChat: () => void;
 }
 
-const SUGGESTIONS: { icon: React.ReactNode; title: string; prompt: string }[] = [
-  { icon: <Gamepad2 className="h-4 w-4 text-cyan-300" />, title: "Build a game", prompt: "Build a complete playable neon arcade game — a wave-based space shooter with powerups, score and restart. Give me the full single-file HTML." },
-  { icon: <Clapperboard className="h-4 w-4 text-pink-300" />, title: "Generate a video", prompt: "Render a cinematic video: a neon jellyfish drifting through a deep ocean trench, volumetric light rays, slow motion" },
-  { icon: <Globe className="h-4 w-4 text-violet-300" />, title: "Create a website", prompt: "Create a stunning dark-themed portfolio website for a game developer, single-file HTML with smooth animations and a hero section." },
-  { icon: <Brain className="h-4 w-4 text-amber-300" />, title: "Explain anything", prompt: "Explain how neural networks learn, with a small interactive HTML visualization I can play with." },
+const SUGGESTIONS: { icon: React.ReactNode; title: string; prompt: string; color: string }[] = [
+  { icon: <Gamepad2 className="h-4 w-4 text-cyan-300" />, title: "Build a game", prompt: "Build a complete playable neon arcade game — a wave-based space shooter with powerups, score and restart. Give me the full single-file HTML.", color: "#22d3ee" },
+  { icon: <Clapperboard className="h-4 w-4 text-pink-300" />, title: "Generate a video", prompt: "Render a cinematic video: a neon jellyfish drifting through a deep ocean trench, volumetric light rays, slow motion", color: "#f472b6" },
+  { icon: <Globe className="h-4 w-4 text-violet-300" />, title: "Create a website", prompt: "Create a stunning dark-themed portfolio website for a game developer, single-file HTML with smooth animations and a hero section.", color: "#a78bfa" },
+  { icon: <Brain className="h-4 w-4 text-amber-300" />, title: "Explain anything", prompt: "Explain how neural networks learn, with a small interactive HTML visualization I can play with.", color: "#fbbf24" },
+  { icon: <SquareTerminal className="h-4 w-4 text-emerald-300" />, title: "Try the terminal", prompt: "/run neofetch", color: "#34d399" },
+  { icon: <TerminalSquare className="h-4 w-4 text-sky-300" />, title: "All slash commands", prompt: "/help", color: "#38bdf8" },
 ];
 
 const SLASH_COMMANDS: { name: string; desc: string }[] = [
@@ -131,12 +140,25 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
   const [listening, setListening] = useState(false);
   const [effortOpen, setEffortOpen] = useState(false);
   const [slashSel, setSlashSel] = useState(0);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [greeting, setGreeting] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const convRef = useRef<string | null>(conversationId);
   const fileRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<{ stop: () => void } | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // time-based greeting (client-only to stay hydration-safe)
+  useEffect(() => {
+    const h = new Date().getHours();
+    setGreeting(h < 5 ? "Late-night build" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
+  }, []);
 
   const shellRef = useRef<ChatShell | null>(null);
   if (!shellRef.current) shellRef.current = new ChatShell();
@@ -146,6 +168,7 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
   const setAppearance = useSettings((s) => s.setAppearance);
   const appearance = useSettings((s) => s.appearance);
   const creditBalance = useSettings((s) => s.credits.balance);
+  const conn = useSettings((s) => s.connections);
 
   useEffect(() => {
     convRef.current = conversationId;
@@ -489,6 +512,43 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    const appendDelta = (text: string) =>
+      setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: x.content + text } : x)));
+
+    // ---- 1) REAL BACKEND: your own API key (BYOK) with live token streaming ----
+    const byokProvider = byokProviderFor(currentModel?.provider ?? "");
+    const byokKey =
+      byokProvider === "openai" ? conn.openaiKey :
+      byokProvider === "anthropic" ? conn.anthropicKey :
+      byokProvider === "google" ? conn.googleKey : "";
+
+    if (byokProvider && byokKey) {
+      const sys =
+        `You are ${currentModel?.name ?? "ChatUltra AI"}, the assistant inside ChatUltra — a dark, Codex-style AI studio. You are capable, friendly and precise. ` +
+        (currentModel?.flavor ? `Model persona: ${currentModel.flavor} ` : "") +
+        "Always answer in Markdown and wrap code in fenced blocks with a language tag. " +
+        "For any web page, game, animation or UI request, produce a COMPLETE single-file HTML document (inline CSS/JS, no external imports except CDN links) inside one ```html block so the app can live-preview it. " +
+        `Effort level: ${eff.label}. ${eff.directive}`;
+      const turns = messagesRef.current
+        .filter((m) => m.kind !== "command" && m.content.trim() && m.id !== aiId)
+        .slice(-10)
+        .map((m) => ({ role: m.role, content: m.content }));
+      const r = await streamByok(byokProvider, {
+        apiKey: byokKey,
+        model,
+        turns,
+        system: sys,
+        signal: ctrl.signal,
+        onDelta: appendDelta,
+      });
+      if (r.ok) return; // finally block cleans up
+      if (r.error === "aborted") return;
+      toast({ title: `${byokProvider === "openai" ? "OpenAI" : byokProvider === "anthropic" ? "Anthropic" : "Google"} call failed — trying the built-in engine`, description: r.error });
+      // reset partial content before falling through
+      setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: "" } : x)));
+    }
+
+    // ---- 2) built-in server brain (/api/chat) ----
     let gotDelta = false;
     try {
       const res = await fetch("/api/chat", {
@@ -521,7 +581,7 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
               }
             } else if (evt.type === "delta") {
               gotDelta = true;
-              setMessages((m) => m.map((x) => (x.id === aiId ? { ...x, content: x.content + evt.text } : x)));
+              appendDelta(evt.text);
             } else if (evt.type === "error") {
               throw new Error(evt.error);
             }
@@ -547,7 +607,7 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
             "produce a COMPLETE single-file HTML document (inline CSS/JS) inside one ```html block. " +
             `Effort level: ${eff.label}. ${eff.directive}`;
           const turns = [
-            ...messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+            ...messagesRef.current.filter((m) => m.kind !== "command" && m.content.trim() && m.id !== aiId).slice(-8).map((m) => ({ role: m.role, content: m.content })),
             { role: "user" as const, content: msg },
           ];
           const r = await callClaude(anthropicKey, turns, sys, 4096);
@@ -597,6 +657,38 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
   };
 
   const stop = () => abortRef.current?.abort();
+
+  /* ---------------- message actions ---------------- */
+
+  const copyMsg = async (m: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(m.content);
+      setCopiedId(m.id);
+      setTimeout(() => setCopiedId((c) => (c === m.id ? null : c)), 1600);
+    } catch {
+      toast({ title: "Clipboard blocked", description: "This browser blocked clipboard access." });
+    }
+  };
+
+  const regenerate = async () => {
+    if (busy) return;
+    const cur = messagesRef.current;
+    let lastUserIdx = -1;
+    for (let i = cur.length - 1; i >= 0; i--) {
+      if (cur[i].role === "user" && cur[i].kind !== "command" && cur[i].content.trim()) {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    if (lastUserIdx === -1) return;
+    const text = cur[lastUserIdx].content;
+    const truncated = cur.slice(0, lastUserIdx);
+    messagesRef.current = truncated;
+    setMessages(truncated);
+    setTimeout(() => {
+      void send(text);
+    }, 20);
+  };
 
   /* ---------------- voice input ---------------- */
 
@@ -712,50 +804,151 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
   const toolBtn = "flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/[0.07] hover:text-zinc-100";
   const toolBtnActive = "flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-400/15 text-cyan-300 transition hover:bg-cyan-400/25";
 
+  // which brain answers right now — surfaced on the welcome screen
+  const activeProvider = byokProviderFor(currentModel?.provider ?? "");
+  const brainLive =
+    (activeProvider === "openai" && Boolean(conn.openaiKey)) ||
+    (activeProvider === "anthropic" && Boolean(conn.anthropicKey)) ||
+    (activeProvider === "google" && Boolean(conn.googleKey));
+  const brainChip = brainLive
+    ? {
+        icon: <KeyRound className="h-3 w-3" />,
+        label: `Live · your ${activeProvider === "openai" ? "OpenAI" : activeProvider === "anthropic" ? "Anthropic" : "Google"} key`,
+        cls: "border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-200",
+      }
+    : conn.backendOk
+      ? {
+          icon: <Zap className="h-3 w-3" />,
+          label: "Live · ChatUltra backend",
+          cls: "border-cyan-400/25 bg-cyan-400/[0.07] text-cyan-200",
+        }
+      : {
+          icon: <Cpu className="h-3 w-3" />,
+          label: "Built-in engine · add an API key for live models",
+          cls: "border-white/10 bg-white/[0.04] text-zinc-300",
+        };
+
+  const providerChips: { name: string; icon: string | null }[] = [
+    { name: "OpenAI", icon: "/icons/openai.svg" },
+    { name: "Anthropic", icon: "/icons/claude.svg" },
+    { name: "Google Gemini", icon: "/icons/googlegemini.svg" },
+    { name: "ChatUltra Luna", icon: "/logo.svg" },
+    { name: "ByteDance Seed", icon: null },
+    { name: "Kling AI", icon: null },
+    { name: "Local AI", icon: null },
+  ];
+
   return (
     <StudioContext.Provider value={{ openPreview, runCommand, openTerminal: () => setTermOpen(true) }}>
       <div className="flex h-full min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {messages.length === 0 ? (
             /* ---------- welcome ---------- */
-            <div className="flex flex-1 flex-col items-center justify-center px-4">
-              <div className="anim-float relative mb-5">
-                <Image
-                  src={asset("/logo.png")}
-                  alt="ChatUltra AI"
-                  width={110}
-                  height={110}
-                  className="rounded-3xl border border-white/10 shadow-2xl shadow-cyan-500/20"
-                  priority
-                  unoptimized
-                />
+            <div className="relative flex flex-1 flex-col overflow-y-auto px-4 py-8">
+              {/* aurora backdrop */}
+              <div className="nx-aurora" aria-hidden>
+                <div className="nx-orb nx-orb-a" />
+                <div className="nx-orb nx-orb-b" />
+                <div className="nx-orb nx-orb-c" />
+                <div className="nx-grid" />
               </div>
-              <h1 className="anim-grad bg-gradient-to-r from-cyan-200 via-white to-violet-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
-                ChatUltra
-              </h1>
-              <p className="mt-2 text-[13.5px] text-zinc-400">
-                Chat · Build games · Run commands · Ship to GitHub — your Codex-grade AI workspace
-              </p>
-              <div className="mt-8 grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s.title}
-                    onClick={() => send(s.prompt)}
-                    className="group rounded-xl border border-white/10 bg-white/[0.03] p-3.5 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/[0.06]"
-                  >
-                    <div className="text-[13px] font-medium text-zinc-100">
-                      <span className="mr-1.5">{s.icon}</span>
-                      {s.title}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-zinc-500 group-hover:text-zinc-400">
-                      {s.prompt}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="mt-5 flex items-center gap-2 text-[11.5px] text-zinc-600">
-                <TerminalSquare className="h-3.5 w-3.5" />
-                Type <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/</code> for commands — try <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/video neon city flythrough</code> or <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/run neofetch</code>
+
+              <div className="relative z-10 m-auto flex w-full flex-col items-center">
+                {/* logo with orbiting sparks */}
+                <div className="anim-rise relative mb-6">
+                  <div className="nx-orbit" aria-hidden>
+                    <span className="nx-orbit-dot" />
+                    <span className="nx-orbit-dot" />
+                  </div>
+                  <div className="anim-float">
+                    <Image
+                      src={asset("/logo.png")}
+                      alt="ChatUltra AI"
+                      width={110}
+                      height={110}
+                      className="rounded-3xl border border-white/10 shadow-2xl shadow-cyan-500/20"
+                      priority
+                      unoptimized
+                    />
+                  </div>
+                </div>
+
+                {/* greeting + headline */}
+                {greeting && (
+                  <p className="anim-rise anim-d1 mb-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-300/80">{greeting}</p>
+                )}
+                <h1 className="anim-rise anim-d1 anim-grad bg-gradient-to-r from-cyan-200 via-white to-violet-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
+                  ChatUltra
+                </h1>
+                <p className="anim-rise anim-d2 mt-3 max-w-md text-center text-[13.5px] leading-relaxed text-zinc-400">
+                  Chat, build games, run commands and ship to GitHub — your Codex-grade AI workspace.{" "}
+                  <span className="text-zinc-300">Bring your own API key and the real models answer, live.</span>
+                </p>
+
+                {/* brain status + stat chips */}
+                <div className="anim-rise anim-d3 mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <span className={cn("flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium", brainChip.cls)}>
+                    {brainChip.icon}
+                    {brainChip.label}
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300">{models.length} models</span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300">6 effort levels</span>
+                  <span className="nx-free-pill rounded-full border border-emerald-400/30 px-2.5 py-1 text-[11px] font-medium text-emerald-300">free tier · 0 credits</span>
+                </div>
+
+                {/* suggestion cards */}
+                <div className="mt-8 grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {SUGGESTIONS.map((s, i) => (
+                    <button
+                      key={s.title}
+                      onClick={() => send(s.prompt)}
+                      className={cn(
+                        "nx-sugg group relative overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] p-3.5 text-left transition hover:border-white/20 hover:bg-white/[0.05] anim-rise",
+                        `anim-d${Math.min(i + 4, 8)}`
+                      )}
+                    >
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent opacity-0 transition group-hover:opacity-70"
+                        style={{ backgroundImage: `linear-gradient(90deg, transparent, ${s.color}, transparent)` }}
+                      />
+                      <div className="flex items-start gap-2.5">
+                        <span className="nx-tile">{s.icon}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1 text-[13px] font-medium text-zinc-100">
+                            {s.title}
+                            <ArrowUpRight className="h-3 w-3 -translate-x-1 translate-y-1 text-zinc-500 opacity-0 transition group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100" />
+                          </span>
+                          <span className="mt-0.5 line-clamp-2 block text-[11.5px] leading-relaxed text-zinc-500 group-hover:text-zinc-400">
+                            {s.title === "Try the terminal" ? "instant — neofetch runs in the built-in shell" : s.title === "All slash commands" ? "the full command palette, in one card" : s.prompt}
+                          </span>
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* provider marquee */}
+                <div className="anim-rise anim-d8 mt-8 w-full max-w-xl overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_18%,black_82%,transparent)]">
+                  <div className="nx-marquee flex items-center gap-2">
+                    {[...providerChips, ...providerChips].map((p, i) => (
+                      <span key={i} className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-zinc-400">
+                        {p.icon ? (
+                          <img src={asset(p.icon)} alt="" className="h-3 w-3" />
+                        ) : (
+                          <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />
+                        )}
+                        {p.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* slash hint */}
+                <div className="anim-rise anim-d8 mt-4 flex items-center gap-2 text-[11.5px] text-zinc-600">
+                  <TerminalSquare className="h-3.5 w-3.5" />
+                  Type <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/</code> for commands — try <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/video neon city flythrough</code> or <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-cyan-300">/run neofetch</code>
+                </div>
               </div>
             </div>
           ) : (
@@ -855,8 +1048,31 @@ export function ChatView({ models, model, effort, conversationId, terminalSignal
                             )}
                             {!m.streaming && m.content && (
                               <div className="mt-1.5 flex items-center gap-2 border-t border-white/5 pt-1.5 text-[10.5px] text-zinc-600">
+                                <button
+                                  onClick={() => copyMsg(m)}
+                                  className="flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-white/[0.06] hover:text-zinc-300"
+                                  aria-label="Copy message"
+                                >
+                                  {copiedId === m.id ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                                  {copiedId === m.id ? "Copied" : "Copy"}
+                                </button>
+                                <span className="text-zinc-700">·</span>
                                 {m.model && <span className="font-mono">{m.model}</span>}
                                 {m.effort && <span>· effort {m.effort}</span>}
+                                {m.id === messages[messages.length - 1]?.id && (
+                                  <>
+                                    <span className="text-zinc-700">·</span>
+                                    <button
+                                      onClick={regenerate}
+                                      disabled={busy}
+                                      className="flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-white/[0.06] hover:text-zinc-300 disabled:opacity-40"
+                                      aria-label="Regenerate response"
+                                    >
+                                      <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} />
+                                      Regenerate
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>

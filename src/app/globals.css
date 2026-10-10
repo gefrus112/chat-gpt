@@ -262,10 +262,147 @@ body.nx-glow-off img {
   animation: nxGradShift 7s ease-in-out infinite;
 }
 
+/* ============ ChatUltra v3 hero layer ============ */
+
+/* aurora backdrop */
+.nx-aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.nx-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.55;
+  will-change: transform;
+}
+.nx-orb-a {
+  width: 420px;
+  height: 420px;
+  left: max(-120px, 6%);
+  top: -140px;
+  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.34), transparent 65%);
+  animation: nxOrbA 22s ease-in-out infinite;
+}
+.nx-orb-b {
+  width: 480px;
+  height: 480px;
+  right: -160px;
+  top: 8%;
+  background: radial-gradient(circle at 60% 40%, rgba(167, 139, 250, 0.3), transparent 65%);
+  animation: nxOrbB 26s ease-in-out infinite;
+}
+.nx-orb-c {
+  width: 380px;
+  height: 380px;
+  left: 28%;
+  bottom: -180px;
+  background: radial-gradient(circle at 50% 50%, rgba(244, 114, 182, 0.16), transparent 65%);
+  animation: nxOrbC 30s ease-in-out infinite;
+}
+@keyframes nxOrbA {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(60px, 40px) scale(1.12); }
+}
+@keyframes nxOrbB {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-70px, -30px) scale(0.94); }
+}
+@keyframes nxOrbC {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(40px, -50px) scale(1.08); }
+}
+
+/* faint engineering grid, radially masked */
+.nx-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%);
+}
+
+/* orbiting spark dots around the hero logo */
+.nx-orbit {
+  position: absolute;
+  inset: -12px;
+  animation: nxSpin 9s linear infinite;
+  pointer-events: none;
+}
+.nx-orbit-dot {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 9999px;
+  background: var(--nx-accent, #22d3ee);
+  box-shadow: 0 0 10px 2px rgba(34, 211, 238, 0.5);
+}
+.nx-orbit-dot:nth-child(2) {
+  top: auto;
+  bottom: -3px;
+  opacity: 0.7;
+}
+@keyframes nxSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* staggered entrance */
+@keyframes nxRise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-rise { animation: nxRise 0.6s cubic-bezier(0.21, 1.02, 0.55, 1) both; }
+.anim-d1 { animation-delay: 0.05s; }
+.anim-d2 { animation-delay: 0.14s; }
+.anim-d3 { animation-delay: 0.23s; }
+.anim-d4 { animation-delay: 0.32s; }
+.anim-d5 { animation-delay: 0.41s; }
+.anim-d6 { animation-delay: 0.5s; }
+.anim-d7 { animation-delay: 0.59s; }
+.anim-d8 { animation-delay: 0.68s; }
+
+/* provider marquee */
+@keyframes nxMarquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.nx-marquee {
+  width: max-content;
+  animation: nxMarquee 26s linear infinite;
+}
+
+/* suggestion card icon tile */
+.nx-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.nx-sugg:hover .nx-tile {
+  transform: scale(1.1) rotate(-4deg);
+  background: rgba(255, 255, 255, 0.09);
+}
+
 /* respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .anim-msg, .anim-pop, .anim-float, .anim-credit-pulse, .nx-free-pill,
-  .nx-dot, .nx-caret::after, .nx-render-sweep, .anim-grad {
+  .nx-dot, .nx-caret::after, .nx-render-sweep, .anim-grad,
+  .anim-rise, .nx-orb-a, .nx-orb-b, .nx-orb-c, .nx-orbit, .nx-marquee {
     animation: none !important;
   }
 }

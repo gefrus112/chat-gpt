@@ -2,7 +2,7 @@
 
 <p align="center"><img src="public/logo.png" width="96" alt="ChatUltra logo" /></p>
 
-**ChatUltra v2** is a dark, Codex-style AI studio that runs anywhere — chat with GPT-5.2, **Claude Opus 5.1**, Claude Opus 5, Claude Sonnet 4.5, Gemini 3 Pro, Luna and local models, **generate AI videos with Dreamina 4, Seedance 1 Pro and Kling Omni (free)**, top up **credits with Stripe**, sync accounts to **Supabase** (with **Cloudflare Turnstile** protection), run a **real backend from a folder with your own API keys**, run shell commands right in the chat, preview HTML live, build games in the Playground, and push projects straight to GitHub.
+**ChatUltra v3** is a dark, Codex-style AI studio that runs anywhere — **bring your own API keys (OpenAI, Anthropic, Google) and the real models answer live with token streaming**, chat with GPT-5.2, **Claude Opus 5.1**, Claude Opus 5, Claude Sonnet 4.5, Gemini 3 Pro, Luna and local models, **generate AI videos with Dreamina 4, Seedance 1 Pro and Kling Omni (free)**, top up **credits with Stripe**, sync accounts to **Supabase** (with **Cloudflare Turnstile** protection), run a **real backend from a folder with your own API keys**, run shell commands right in the chat, preview HTML live, build games in the Playground, and push projects straight to GitHub — all wrapped in a new **aurora hero home page** with animated orbs, orbiting logo sparks, a time-based greeting and a live provider marquee.
 
 Live site: **https://gefrus112.github.io/chat-gpt/** &middot; Repo: `gefrus112/chat-gpt`
 
@@ -17,6 +17,22 @@ Live site: **https://gefrus112.github.io/chat-gpt/** &middot; Repo: `gefrus112/c
 Slim icon rail on the left, model chip + effort dial + toolbar (effort, web access, terminal, attach, more), a credits chip and a voice-input mic in the composer — the full Codex/Jan-style layout in dark mode, with smooth motion everywhere: message entrances, floating hero, shimmering FREE badges, typing dots and a streaming caret.
 
 ![ChatUltra welcome](docs/screenshots/chat.png)
+
+### New aurora hero home page (v3)
+
+Animated aurora orbs, an engineering grid, orbiting spark dots around the logo, a time-based greeting ("Good evening"), live brain-status chips ("Live · your OpenAI key" / "Built-in engine"), six one-click starter cards and a scrolling provider marquee — every element rises in with staggered motion.
+
+![Aurora hero](docs/screenshots/home-v3-final.png)
+
+### Your API keys = the real backend (v3)
+
+Paste an **OpenAI**, **Anthropic** or **Google** key in Settings > Connections, press **Test connection**, and the matching models answer for real — streamed token-by-token straight from your browser. Keys are stored only on this device and sent nowhere except the provider's own API. Model fallback chains (e.g. GPT-5.2 → GPT-5 → GPT-4.1) keep older keys working, and friendly errors replace cryptic HTTPS failures.
+
+![API key connections](docs/screenshots/connections-v3.png)
+
+### Message actions (v3)
+
+Every answer gets a **Copy** button (with "Copied" feedback) and the newest answer gets **Regenerate** — one click re-runs your last prompt with the picked model and effort.
 
 ### Searchable model picker — video models included
 
@@ -71,6 +87,9 @@ Create an account, upload a profile picture, edit your bio and website link — 
 ## Features
 
 - **14 built-in models** — GPT-5.2, GPT-5.2 Codex, o4 Mini, **Claude Opus 5.1**, Claude Opus 5, Claude Sonnet 4.5, Gemini 3 Pro, Gemini 2.5 Flash, Luna 1, Local AI (Gemma 2B, Llama 3.1, Mistral Small) + **video models: Dreamina 4, Seedance 1 Pro, Kling Omni** — each with its own (brand-accurate or hand-crafted) icon
+- **Your API keys = the real backend (BYOK)** — paste an OpenAI / Anthropic / Google key in Settings > Connections and those models stream live token-by-token from the browser; keys stay on-device; friendly validation with **Test connection** buttons
+- **Aurora hero home page** — animated orbs + grid, orbiting logo sparks, time-based greeting, brain-status chip, 6 starter cards, provider marquee, staggered entrances
+- **Message actions** — Copy (with feedback) on every answer, Regenerate on the latest, stop-generation anytime
 - **Free public models** — video generation and text on Dreamina 4, Seedance 1 Pro, Kling Omni and Luna 1 never cost credits
 - **Credits & Stripe** — balance chip in the composer, `/credits` command, three plans, Stripe Checkout through the backend connector
 - **Accounts** — local signup with hashed passwords, avatar upload, bio, website link; one-click **Sync to Supabase**; Cloudflare Turnstile widget support
@@ -97,7 +116,11 @@ Full server mode uses the bundled AI backend and SQLite (Prisma). Without a back
 
 ## Real backend (API keys, Stripe, Supabase)
 
-The `backend/` folder is the production brain of ChatUltra:
+There are two ways to go live:
+
+**1. BYOK — fastest, zero setup (v3).** Settings > Connections > paste your OpenAI / Anthropic / Google key > Test connection. Done — GPT, Claude and Gemini models answer for real with live streaming, straight from the browser. Works on the static GitHub Pages site too.
+
+**2. The `backend/` folder — full server.** Real text + video generation, Stripe credits, Supabase accounts:
 
 ```bash
 cd backend
