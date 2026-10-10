@@ -1,0 +1,9 @@
+1:"$Sreact.fragment"
+2:I[31463,["/chat-gpt/_next/static/chunks/b04f9535255b0c37.js","/chat-gpt/_next/static/chunks/6692f865a36214c2.js"],"ClientPageRoot"]
+3:I[2072,["/chat-gpt/_next/static/chunks/d971f5e0fb1501e0.js","/chat-gpt/_next/static/chunks/6578430c90c54806.js","/chat-gpt/_next/static/chunks/b04f9535255b0c37.js","/chat-gpt/_next/static/chunks/6a43eaca3f2eb5a0.js"],"default"]
+6:I[8861,["/chat-gpt/_next/static/chunks/b04f9535255b0c37.js","/chat-gpt/_next/static/chunks/6692f865a36214c2.js"],"OutletBoundary"]
+7:"$Sreact.suspense"
+0:{"buildId":"hATQWjI2uOOIa-PS5E7Gc","rsc":["$","$1","c",{"children":[["$","$L2",null,{"Component":"$3","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@4","$@5"]}}],[["$","script","script-0",{"src":"/chat-gpt/_next/static/chunks/b04f9535255b0c37.js","async":true}],["$","script","script-1",{"src":"/chat-gpt/_next/static/chunks/6a43eaca3f2eb5a0.js","async":true}]],["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"loading":null,"isPartial":false}
+4:{}
+5:"$0:rsc:props:children:0:props:serverProvidedParams:params"
+8:null
